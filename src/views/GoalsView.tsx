@@ -6,13 +6,19 @@ import { useData } from '../state/DataContext';
 import { contributionStart, goalProgress, type GoalProgress } from '../lib/calc';
 import { formatEURRounded, formatPercent } from '../lib/format';
 import { formatMonthLong, isMonthKey, monthsLeftLabel } from '../lib/months';
+import { moveById, type DropPosition } from '../lib/reorder';
 import { uid } from '../lib/seed';
 import { PRIORITY_LABELS } from '../lib/labels';
 import { AmountInput } from '../components/AmountInput';
 import { ConfirmDelete } from '../components/ConfirmDelete';
 import { PageHeader } from '../components/Layout';
 import { ProgressBar } from '../components/ProgressBar';
+import { DragHandle, useReorder } from '../components/Reorder';
 import { StatusBadge, statusTone } from '../components/StatusBadge';
+
+type Entry = { goal: Goal; progress: GoalProgress };
+type RowProps = ReturnType<ReturnType<typeof useReorder>['itemProps']>;
+type HandleProps = ReturnType<ReturnType<typeof useReorder>['handleProps']>;
 
 export function GoalsView({ nav }: { nav: Nav }) {
   const { goals, months, nowKey, updateGoals } = useData();
@@ -60,13 +66,18 @@ export function GoalsView({ nav }: { nav: Nav }) {
     0,
   );
 
-  const card = (x: { goal: Goal; progress: GoalProgress }) => (
+  const move = (from: string, to: string, position: DropPosition) =>
+    updateGoals((prev) => ({ ...prev, goals: moveById(prev.goals, from, to, position) }));
+
+  const card = (x: Entry, rowProps: RowProps, handleProps: HandleProps) => (
     <GoalCard
       key={x.goal.id}
       goal={x.goal}
       progress={x.progress}
       nowKey={nowKey}
       editing={editingId === x.goal.id}
+      rowProps={rowProps}
+      handleProps={handleProps}
       onEdit={() => setEditingId(editingId === x.goal.id ? null : x.goal.id)}
       onPatch={(p) => patch(x.goal.id, p)}
       onDelete={() => remove(x.goal.id)}
@@ -101,24 +112,42 @@ export function GoalsView({ nav }: { nav: Nav }) {
         />
       </div>
 
-      <Section title="Prioritaires" count={high.length}>
-        {high.map(card)}
-      </Section>
-      <Section title="Entrées d’argent prévues" count={incomes.length}>
-        {incomes.map(card)}
-      </Section>
-      <Section title="Pas prioritaires" count={low.length}>
-        {low.map(card)}
-      </Section>
+      <Section title="Prioritaires" entries={high} onMove={move} render={card} />
+      <Section title="Entrées d’argent prévues" entries={incomes} onMove={move} render={card} />
+      <Section title="Pas prioritaires" entries={low} onMove={move} render={card} />
 
       {abandoned.length > 0 && (
         <div className="mt-8">
           <button type="button" className="section-title flex items-center gap-1 hover:text-ink" onClick={() => setShowAbandoned((s) => !s)}>
             {showAbandoned ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Abandonnés ({abandoned.length})
           </button>
-          {showAbandoned && <div className="mt-3 flex flex-col gap-3 opacity-70">{abandoned.map(card)}</div>}
+          {showAbandoned && (
+            <div className="mt-3 opacity-70">
+              <SortableGoals entries={abandoned} onMove={move} render={card} />
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function SortableGoals({
+  entries,
+  onMove,
+  render,
+}: {
+  entries: Entry[];
+  onMove: (from: string, to: string, position: DropPosition) => void;
+  render: (entry: Entry, rowProps: RowProps, handleProps: HandleProps) => ReactNode;
+}) {
+  const { itemProps, handleProps } = useReorder(
+    entries.map((e) => e.goal.id),
+    onMove,
+  );
+  return (
+    <div className="flex flex-col gap-3">
+      {entries.map((e) => render(e, itemProps(e.goal.id), handleProps(e.goal.id, e.goal.name)))}
     </div>
   );
 }
@@ -133,14 +162,24 @@ function MiniStat({ label, value, hint }: { label: string; value: string; hint?:
   );
 }
 
-function Section({ title, count, children }: { title: string; count: number; children: ReactNode }) {
-  if (count === 0) return null;
+function Section({
+  title,
+  entries,
+  onMove,
+  render,
+}: {
+  title: string;
+  entries: Entry[];
+  onMove: (from: string, to: string, position: DropPosition) => void;
+  render: (entry: Entry, rowProps: RowProps, handleProps: HandleProps) => ReactNode;
+}) {
+  if (entries.length === 0) return null;
   return (
     <section className="mt-8">
       <h2 className="section-title mb-3">
-        {title} ({count})
+        {title} ({entries.length})
       </h2>
-      <div className="flex flex-col gap-3">{children}</div>
+      <SortableGoals entries={entries} onMove={onMove} render={render} />
     </section>
   );
 }
@@ -150,6 +189,8 @@ function GoalCard({
   progress,
   nowKey,
   editing,
+  rowProps,
+  handleProps,
   onEdit,
   onPatch,
   onDelete,
@@ -159,6 +200,8 @@ function GoalCard({
   progress: GoalProgress;
   nowKey: string;
   editing: boolean;
+  rowProps: RowProps;
+  handleProps: HandleProps;
   onEdit: () => void;
   onPatch: (p: Partial<Goal>) => void;
   onDelete: () => void;
@@ -166,10 +209,13 @@ function GoalCard({
 }) {
   const isIncome = goal.kind === 'entree';
   return (
-    <article className={`card p-5 ${editing ? 'ring-2 ring-accent' : ''}`}>
+    <article className={`card reorder-item p-5 ${editing ? 'ring-2 ring-accent' : ''}`} {...rowProps}>
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
+            <span className="-ml-2">
+              <DragHandle {...handleProps} />
+            </span>
             <h3 className="text-base font-semibold text-ink">{goal.name || <span className="text-muted">Sans nom</span>}</h3>
             <StatusBadge progress={progress} />
             {goal.linkedAccount && (

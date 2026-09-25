@@ -3,6 +3,7 @@ import { ArrowRight, CalendarCheck } from 'lucide-react';
 import type { Nav } from '../App';
 import { useData } from '../state/DataContext';
 import { availableWealth, contributionStart, goalProgress, monthTotals } from '../lib/calc';
+import { accountSummary } from '../lib/account';
 import { formatEURRounded, formatPercent, formatSignedEUR } from '../lib/format';
 import { addMonths, formatMonthLong, formatMonthShort, monthsLeftLabel } from '../lib/months';
 import { Card, PageHeader, StatTile } from '../components/Layout';
@@ -30,15 +31,15 @@ export function Dashboard({ nav }: { nav: Nav }) {
   const prevKey = addMonths(nowKey, -1);
   const prevToClose = months.months[prevKey] && !months.months[prevKey].closure;
 
+  const account = accountSummary(months, nowKey);
+
   const fromKey = contributionStart(months, nowKey);
   const rank = { haute: 0, basse: 1, abandonne: 2 } as const;
+  // Stable sort: within a priority, goals keep the order chosen in the Objectifs view.
   const active = goals.goals
     .filter((g) => g.kind === 'achat' && g.priority !== 'abandonne')
     .map((g) => ({ goal: g, progress: goalProgress(g, fromKey, items) }))
-    .sort(
-      (a, b) =>
-        rank[a.goal.priority] - rank[b.goal.priority] || (a.goal.targetDate ?? '9999').localeCompare(b.goal.targetDate ?? '9999'),
-    );
+    .sort((a, b) => rank[a.goal.priority] - rank[b.goal.priority]);
   const incomes = goals.goals.filter((g) => g.kind === 'entree' && g.priority !== 'abandonne');
 
   return (
@@ -68,6 +69,15 @@ export function Dashboard({ nav }: { nav: Nav }) {
             {formatEURRounded(t.revenus)} de revenus − {formatEURRounded(t.depensesFixes + t.depensesVariables)} de dépenses −{' '}
             {formatEURRounded(t.epargne)} d’épargne
           </div>
+          {account.actual && (
+            <div className="tabular mt-1.5">
+              Compte courant : <span className="font-medium text-ink">{formatEURRounded(account.actual.amount)}</span>
+              {account.endOfMonth !== null && <> · fin de mois prévue {formatEURRounded(account.endOfMonth)}</>}
+              {account.gap !== null && account.gap <= -1 && (
+                <span className="text-negative"> · écart {formatSignedEUR(account.gap)}</span>
+              )}
+            </div>
+          )}
           <div className="mt-2">
             <LinkButton onClick={() => nav.go('mois', { month: nowKey })}>Détail du mois</LinkButton>
           </div>

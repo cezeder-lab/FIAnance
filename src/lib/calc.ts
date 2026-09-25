@@ -100,12 +100,12 @@ export function monthsToReach(remaining: number, monthly: number): number | null
   return Math.ceil(remaining / monthly);
 }
 
-/** Savings of a month that go to purchase goals, summed per goal. */
+/** Savings of a month actually transferred ("versé") to purchase goals, summed per goal. */
 export function monthContributions(items: MonthItem[], goals: Goal[]): GoalContribution[] {
   const purchaseIds = new Set(goals.filter((g) => g.kind === 'achat').map((g) => g.id));
   const byGoal = new Map<string, number>();
   for (const it of items) {
-    if (it.category !== 'epargne' || !it.goalId || !purchaseIds.has(it.goalId) || !(it.amount > 0)) continue;
+    if (it.category !== 'epargne' || !it.cleared || !it.goalId || !purchaseIds.has(it.goalId) || !(it.amount > 0)) continue;
     byGoal.set(it.goalId, (byGoal.get(it.goalId) ?? 0) + it.amount);
   }
   return Array.from(byGoal, ([goalId, amount]) => ({ goalId, amount: round2(amount) }));

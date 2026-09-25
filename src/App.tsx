@@ -9,6 +9,7 @@ import {
   Landmark,
   LayoutDashboard,
   LoaderCircle,
+  ShieldCheck,
   Target,
   X,
   type LucideIcon,
@@ -37,7 +38,7 @@ const NAV: { id: ViewId; label: string; Icon: LucideIcon }[] = [
 ];
 
 export function App() {
-  const { nowKey, saveState, backup, warnings, dismissWarnings } = useData();
+  const { nowKey, saveState, backup, warnings, dismissWarnings, versionBackup, dismissVersionBackup } = useData();
   const [view, setView] = useState<ViewId>('dashboard');
   const [month, setMonth] = useState(nowKey);
   const [simGoalId, setSimGoalId] = useState<string | null>(null);
@@ -135,6 +136,18 @@ export function App() {
 
       <main id="main" className="relative flex-1 overflow-y-auto">
         <div className="mx-auto max-w-6xl px-8 py-8">
+          {versionBackup && (
+            <div className="mb-6 flex items-start gap-3 rounded-xl border border-line bg-accent-soft p-4 text-sm text-ink" role="status">
+              <ShieldCheck size={18} className="mt-0.5 shrink-0 text-accent" />
+              <div className="min-w-0 flex-1">
+                <p>Nouvelle version installée : vos données ont été copiées avant la mise à jour, par précaution.</p>
+                <p className="mt-0.5 break-all text-xs text-muted">{versionBackup}</p>
+              </div>
+              <button type="button" className="icon-btn" aria-label="Fermer" onClick={dismissVersionBackup}>
+                <X size={15} />
+              </button>
+            </div>
+          )}
           {warnings.length > 0 && (
             <div className="mb-6 flex items-start gap-3 rounded-xl border border-line bg-[var(--warning-soft)] p-4 text-sm text-ink">
               <CircleAlert size={18} className="mt-0.5 shrink-0 text-[var(--warning-ink)]" />

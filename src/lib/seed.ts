@@ -45,9 +45,9 @@ export function seedPatrimoine(): PatrimoineFile {
   return { version: 1, financier, history: [] };
 }
 
-/** Copies the recurring items of `items`, with fresh ids, for a new month. */
+/** Copies the recurring items of `items`, in the same order and not yet received / paid / transferred, for a new month. */
 export function carryOver(items: MonthItem[]): MonthItem[] {
-  return items.filter((it) => it.recurring).map((it) => ({ ...it, id: uid() }));
+  return items.filter((it) => it.recurring).map((it) => ({ ...it, id: uid(), cleared: false }));
 }
 
 /** Latest month strictly before `monthKey` that has data. */

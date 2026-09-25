@@ -5,6 +5,7 @@ const { createStorage } = require('./storage');
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
 let storage;
+const startup = { versionBackup: null, warnings: [] };
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -42,7 +43,10 @@ function createWindow() {
 }
 
 function registerIpc() {
-  ipcMain.handle('data:load', () => storage.loadAll());
+  ipcMain.handle('data:load', () => {
+    const loaded = storage.loadAll();
+    return { ...loaded, versionBackup: startup.versionBackup, warnings: [...startup.warnings, ...loaded.warnings] };
+  });
 
   ipcMain.handle('data:save', (_event, name, data) => {
     storage.save(name, data);
@@ -75,6 +79,11 @@ function registerIpc() {
 
 app.whenReady().then(() => {
   storage = createStorage(path.join(app.getPath('userData'), 'data'));
+  try {
+    startup.versionBackup = storage.backupOnVersionChange(app.getVersion());
+  } catch (err) {
+    startup.warnings.push(`La sauvegarde automatique avant mise à jour a échoué (${err.message}). Pensez à exporter une sauvegarde.`);
+  }
   registerIpc();
   createWindow();
 

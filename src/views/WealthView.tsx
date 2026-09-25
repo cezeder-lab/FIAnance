@@ -5,11 +5,13 @@ import { useData } from '../state/DataContext';
 import { availableWealth, sumLines, valued, withHistoryPoint } from '../lib/calc';
 import { formatEUR, formatEURRounded, formatSignedEUR } from '../lib/format';
 import { formatDay, formatMonthLong, formatMonthShort, isMonthKey } from '../lib/months';
+import { moveById } from '../lib/reorder';
 import { uid } from '../lib/seed';
 import { ASSET_KIND_LABELS } from '../lib/labels';
 import { AmountInput } from '../components/AmountInput';
 import { ConfirmDelete } from '../components/ConfirmDelete';
 import { Card, PageHeader } from '../components/Layout';
+import { DragHandle, useReorder } from '../components/Reorder';
 import { TrendChart } from '../components/TrendChart';
 
 const dateTimeFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -22,7 +24,7 @@ function patched(line: AssetLine, p: Partial<AssetLine>): AssetLine {
 }
 
 export function WealthView() {
-  const { patrimoine, nowKey, updatePatrimoine } = useData();
+  const { patrimoine, nowKey, updatePatrimoine, recordBalance } = useData();
   const [focusId, setFocusId] = useState<string | null>(null);
 
   const total = availableWealth(patrimoine);
@@ -67,7 +69,13 @@ export function WealthView() {
         </div>
       </div>
 
-      <AssetCard lines={patrimoine.financier} focusId={focusId} onChange={setLines} onAdd={addLine} />
+      <AssetCard
+        lines={patrimoine.financier}
+        focusId={focusId}
+        onChange={setLines}
+        onAdd={addLine}
+        onCurrentAccountBalance={(amount) => recordBalance(nowKey, amount)}
+      />
 
       <HistoryCard patrimoine={patrimoine} history={history} onChange={updatePatrimoine} />
     </div>
@@ -79,13 +87,19 @@ function AssetCard({
   focusId,
   onChange,
   onAdd,
+  onCurrentAccountBalance,
 }: {
   lines: AssetLine[];
   focusId: string | null;
   onChange: (fn: (lines: AssetLine[]) => AssetLine[]) => void;
   onAdd: () => void;
+  onCurrentAccountBalance: (amount: number) => void;
 }) {
   const patch = (id: string, p: Partial<AssetLine>) => onChange((ls) => ls.map((l) => (l.id === id ? patched(l, p) : l)));
+  const { itemProps, handleProps } = useReorder(
+    lines.map((l) => l.id),
+    (from, to, position) => onChange((ls) => moveById(ls, from, to, position)),
+  );
 
   return (
     <Card
@@ -100,7 +114,10 @@ function AssetCard({
             key={l.id}
             line={l}
             autoFocus={l.id === focusId}
+            rowProps={itemProps(l.id)}
+            handleProps={handleProps(l.id, l.label)}
             onPatch={(p) => patch(l.id, p)}
+            onCurrentAccountBalance={onCurrentAccountBalance}
             onDelete={() => onChange((ls) => ls.filter((x) => x.id !== l.id))}
           />
         ))}
@@ -115,20 +132,54 @@ function AssetCard({
 function AssetRow({
   line,
   autoFocus,
+  rowProps,
+  handleProps,
   onPatch,
+  onCurrentAccountBalance,
   onDelete,
 }: {
   line: AssetLine;
   autoFocus: boolean;
+  rowProps: ReturnType<ReturnType<typeof useReorder>['itemProps']>;
+  handleProps: ReturnType<ReturnType<typeof useReorder>['handleProps']>;
   onPatch: (p: Partial<AssetLine>) => void;
+  onCurrentAccountBalance: (amount: number) => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const byUnits = line.valuation === 'quantite';
 
+  if (line.role === 'compte-courant') {
+    return (
+      <li className="reorder-item border-b border-line last:border-0" {...rowProps}>
+        <div className="flex items-center gap-2 py-1">
+          <DragHandle {...handleProps} />
+          <div className="min-w-0 flex-1">
+            <input
+              className="inline-input"
+              value={line.label}
+              title={line.label}
+              aria-label="Libellé"
+              onChange={(e) => onPatch({ label: e.target.value })}
+            />
+            <div className="px-2 text-[11px] text-muted">
+              Dernier solde saisi (aussi modifiable dans l’écran Mois){line.updatedAt && <> · maj {formatDay(line.updatedAt)}</>}
+            </div>
+          </div>
+          <span className="w-24 shrink-0 px-2 text-xs text-ink-2">{ASSET_KIND_LABELS.liquide}</span>
+          <div className="w-60 shrink-0" />
+          <AmountInput className="w-32 shrink-0" value={line.amount} ariaLabel={`Montant ${line.label}`} onChange={(v) => onCurrentAccountBalance(v ?? 0)} />
+          {/* Keeps the amount aligned with the rows that have options and delete buttons. */}
+          <div className="w-16 shrink-0" />
+        </div>
+      </li>
+    );
+  }
+
   return (
-    <li className="border-b border-line last:border-0">
+    <li className="reorder-item border-b border-line last:border-0" {...rowProps}>
       <div className="flex items-center gap-2 py-1">
+        <DragHandle {...handleProps} />
         <div className="min-w-0 flex-1">
           <input
             className="inline-input"

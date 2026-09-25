@@ -1,7 +1,7 @@
 {
   "name": "fianance",
   "productName": "FIAnance",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Suivi patrimonial personnel : flux mensuels, objectifs d'achat, patrimoine et simulateurs. 100 % local.",
   "private": true,
   "main": "electron/main.js",

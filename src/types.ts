@@ -7,6 +7,14 @@ export interface MonthItem {
   category: ItemCategory;
   recurring: boolean;
   goalId?: string | null;
+  /** Received (revenue), paid (expense) or transferred (savings) this month. */
+  cleared?: boolean;
+}
+
+export interface BalanceCheck {
+  amount: number;
+  /** ISO date */
+  at: string;
 }
 
 export interface GoalContribution {
@@ -24,6 +32,10 @@ export interface MonthClosure {
 export interface MonthData {
   items: MonthItem[];
   closure?: MonthClosure;
+  /** Current-account balance before this month's income, when typed by hand; otherwise the previous month's last balance is used. */
+  openingBalance?: number | null;
+  /** Last current-account balance read on the bank side during this month. */
+  balanceCheck?: BalanceCheck | null;
 }
 
 export interface MonthsFile {
@@ -69,6 +81,8 @@ export interface AssetLine {
   valuation?: 'montant' | 'quantite';
   quantity?: number | null;
   unitPrice?: number | null;
+  /** The current account: its amount follows the last balance recorded in the month view. */
+  role?: 'compte-courant';
 }
 
 export interface HistoryPoint {
@@ -91,6 +105,8 @@ export interface LoadResult {
   patrimoine: PatrimoineFile | null;
   dataDir: string | null;
   warnings: string[];
+  /** Folder where the data was copied because a new app version started for the first time. */
+  versionBackup?: string | null;
 }
 
 export interface BackupResult {

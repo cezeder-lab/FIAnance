@@ -68,7 +68,32 @@ function createStorage(dataDir) {
     return written;
   }
 
-  return { dataDir, loadAll, save, backupTo };
+  /**
+   * On the first launch of a new app version, copies the data files aside before anything reads or rewrites them.
+   * Returns the backup folder, or null when there was nothing to back up.
+   */
+  function backupOnVersionChange(appVersion) {
+    const metaFile = path.join(dataDir, 'app-version.json');
+    let previous = null;
+    try {
+      previous = JSON.parse(fs.readFileSync(metaFile, 'utf8')).version;
+    } catch {
+      // No meta file yet: first launch, or data written by a version older than this feature.
+    }
+    if (previous === appVersion) return null;
+
+    const existing = Object.values(FILES).filter((f) => fs.existsSync(path.join(dataDir, f)));
+    let folder = null;
+    if (existing.length > 0) {
+      folder = path.join(dataDir, 'sauvegardes', `avant-${appVersion}_${timestamp()}`);
+      fs.mkdirSync(folder, { recursive: true });
+      for (const f of existing) fs.copyFileSync(path.join(dataDir, f), path.join(folder, f));
+    }
+    fs.writeFileSync(metaFile, JSON.stringify({ version: appVersion }, null, 2), 'utf8');
+    return folder;
+  }
+
+  return { dataDir, loadAll, save, backupTo, backupOnVersionChange };
 }
 
 module.exports = { createStorage };

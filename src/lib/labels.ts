@@ -14,6 +14,14 @@ export const CATEGORY_SINGULAR: Record<ItemCategory, string> = {
   epargne: 'Épargne / investissement',
 };
 
+/** Wording of the per-month checkbox of each category. */
+export const CLEARED_LABELS: Record<ItemCategory, { done: string; todo: string; remaining: string; allDone: string }> = {
+  revenu: { done: 'Reçu', todo: 'Pas encore reçu', remaining: 'Reste à recevoir', allDone: 'Tout est reçu' },
+  depense_fixe: { done: 'Payé', todo: 'Pas encore payé', remaining: 'Reste à payer', allDone: 'Tout est payé' },
+  depense_variable: { done: 'Payé', todo: 'Pas encore payé', remaining: 'Reste à payer', allDone: 'Tout est payé' },
+  epargne: { done: 'Versé', todo: 'Pas encore versé', remaining: 'Reste à verser', allDone: 'Tout est versé' },
+};
+
 export const PRIORITY_LABELS: Record<GoalPriority, string> = {
   haute: 'Prioritaire',
   basse: 'Pas prioritaire',

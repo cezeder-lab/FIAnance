@@ -1,22 +1,52 @@
 import { useMemo, useState } from 'react';
-import { CalendarCheck, ChevronLeft, ChevronRight, CopyPlus, Link2, LockOpen, Plus, Repeat, SlidersHorizontal, TriangleAlert } from 'lucide-react';
+import {
+  CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  CircleCheck,
+  CopyPlus,
+  Link2,
+  LockOpen,
+  Plus,
+  Repeat,
+  SlidersHorizontal,
+  TriangleAlert,
+} from 'lucide-react';
 import type { Nav } from '../App';
 import type { ItemCategory, MonthItem } from '../types';
 import { useData } from '../state/DataContext';
-import { applyContributions, availableWealth, monthContributions, monthTotals, sortedMonthKeys, withHistoryPoint } from '../lib/calc';
+import {
+  applyContributions,
+  availableWealth,
+  monthContributions,
+  monthTotals,
+  round2,
+  sortedMonthKeys,
+  withHistoryPoint,
+} from '../lib/calc';
+import { accountSummary, currentAccountLine, isLatestBalance } from '../lib/account';
 import { formatEURRounded, formatPercent } from '../lib/format';
 import { addMonths, formatDay, formatMonthLong, formatMonthShort, toMonthKey } from '../lib/months';
+import { moveById, type DropPosition } from '../lib/reorder';
 import { carryOver, previousMonthWithData, uid } from '../lib/seed';
-import { CATEGORY_LABELS, CATEGORY_SINGULAR } from '../lib/labels';
+import { CATEGORY_LABELS, CATEGORY_SINGULAR, CLEARED_LABELS } from '../lib/labels';
 import { AmountInput } from '../components/AmountInput';
 import { ConfirmDelete } from '../components/ConfirmDelete';
 import { Card, PageHeader } from '../components/Layout';
+import { DragHandle, useReorder } from '../components/Reorder';
 import { TrendChart } from '../components/TrendChart';
+import { AccountCard } from './AccountCard';
 
 const COLUMNS: ItemCategory[][] = [
   ['revenu', 'epargne'],
   ['depense_fixe', 'depense_variable'],
 ];
+
+interface CloseOptions {
+  recordPoint: boolean;
+  closingBalance: number | null;
+}
 
 export function MonthView({
   month,
@@ -29,7 +59,7 @@ export function MonthView({
   nav: Nav;
   openClosing?: boolean;
 }) {
-  const { months, goals, nowKey, updateMonths, updateGoals, updatePatrimoine } = useData();
+  const { months, goals, nowKey, updateMonths, updateGoals, updatePatrimoine, recordBalance } = useData();
   const [focusId, setFocusId] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
   // Tied to a month so that navigating elsewhere hides the panel.
@@ -55,9 +85,15 @@ export function MonthView({
 
   const addItem = (category: ItemCategory) => {
     const id = uid();
-    setItems((list) => [...list, { id, label: '', amount: 0, category, recurring: true, goalId: null }]);
+    setItems((list) => [...list, { id, label: '', amount: 0, category, recurring: true, goalId: null, cleared: false }]);
     setFocusId(id);
   };
+
+  const addUnidentified = (amount: number) =>
+    setItems((list) => [
+      ...list,
+      { id: uid(), label: 'Dépenses non identifiées', amount: round2(amount), category: 'depense_variable', recurring: false, goalId: null, cleared: true },
+    ]);
 
   const createMonth = (fromPrevious: boolean) =>
     updateMonths((prev) => ({
@@ -77,8 +113,10 @@ export function MonthView({
 
   const contributions = monthContributions(items, goals.goals);
 
-  const confirmClose = (recordPoint: boolean) => {
+  const confirmClose = ({ recordPoint, closingBalance }: CloseOptions) => {
     const closedAt = new Date().toISOString();
+    // Recorded first so that the wealth point below already includes the closing balance.
+    if (closingBalance !== null) recordBalance(month, closingBalance);
     updateGoals((prev) => ({ ...prev, goals: applyContributions(prev.goals, contributions, 1) }));
     if (recordPoint) updatePatrimoine((prev) => withHistoryPoint(prev, month, availableWealth(prev)));
     updateMonths((prev) => ({
@@ -179,6 +217,8 @@ export function MonthView({
         <>
           <CashflowSummary totals={totals} />
 
+          {month <= nowKey && <AccountCard month={month} readOnly={readOnly} onAddUnidentified={addUnidentified} />}
+
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
             {COLUMNS.map((col) => (
               <div key={col.join()} className="flex flex-col gap-6">
@@ -192,6 +232,7 @@ export function MonthView({
                     readOnly={readOnly}
                     onAdd={() => addItem(cat)}
                     onPatch={patchItem}
+                    onMove={(from, to, position) => setItems((list) => moveById(list, from, to, position))}
                     onDelete={(id) => setItems((list) => list.filter((it) => it.id !== id))}
                   />
                 ))}
@@ -272,27 +313,47 @@ function ClosingPanel({
   month: string;
   contributions: { goalId: string; amount: number }[];
   onCancel: () => void;
-  onConfirm: (recordPoint: boolean) => void;
+  onConfirm: (options: CloseOptions) => void;
   onUpdateWealth: () => void;
 }) {
-  const { goals, patrimoine, nowKey } = useData();
-  const wealth = availableWealth(patrimoine);
-  const existing = patrimoine.history.find((h) => h.month === month);
-  const stale = patrimoine.financier.filter((l) => !l.updatedAt || toMonthKey(new Date(l.updatedAt)) < month);
+  const { months, goals, patrimoine, nowKey } = useData();
+  const items = months.months[month]?.items ?? [];
+  const summary = accountSummary(months, month);
   const monthName = formatMonthLong(month).toLowerCase();
   // Today's balances only describe the current or previous month; re-closing an older month keeps its point.
   const [recordPoint, setRecordPoint] = useState(month >= addMonths(nowKey, -1));
+  const [closingBalance, setClosingBalance] = useState<number | null>(summary.actual?.amount ?? summary.expected);
+
+  const account = currentAccountLine(patrimoine);
+  const accountWillFollow = closingBalance !== null && isLatestBalance(months, month);
+  const wealth = availableWealth(patrimoine) - (accountWillFollow && account ? account.amount - (closingBalance as number) : 0);
+  const existing = patrimoine.history.find((h) => h.month === month);
+  const stale = patrimoine.financier.filter(
+    (l) => l.role !== 'compte-courant' && (!l.updatedAt || toMonthKey(new Date(l.updatedAt)) < month),
+  );
+  const unchecked = items.filter((it) => !it.cleared);
+  const linkedNotTransferred = items.filter((it) => it.category === 'epargne' && it.goalId && !it.cleared && it.amount > 0);
 
   return (
     <section className="card mb-6 border-accent p-5 ring-1 ring-accent" aria-label={`Clôturer ${monthName}`}>
       <h2 className="text-[15px] font-semibold text-ink">Clôturer {monthName}</h2>
       <p className="mt-0.5 text-xs text-muted">Le mois sera verrouillé ; vous pourrez le rouvrir pour le corriger.</p>
 
-      <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
+      {unchecked.length > 0 && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs text-ink">
+          <TriangleAlert size={14} className="mt-0.5 shrink-0 text-[var(--warning-ink)]" />
+          <span>
+            Pas encore cochées : {unchecked.map((it) => `${it.label || 'ligne sans nom'} (${CLEARED_LABELS[it.category].todo.toLowerCase()})`).join(', ')}.
+            Cochez celles qui sont réglées avant de clôturer.
+          </span>
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-3">
         <div>
           <h3 className="section-title mb-2">Épargne versée aux objectifs</h3>
           {contributions.length === 0 ? (
-            <p className="text-sm text-muted">Aucune ligne d’épargne n’est liée à un objectif ce mois-ci.</p>
+            <p className="text-sm text-muted">Aucune épargne cochée « versé » n’est liée à un objectif.</p>
           ) : (
             <ul className="tabular space-y-1.5 text-sm">
               {contributions.map((c) => {
@@ -310,6 +371,19 @@ function ClosingPanel({
               })}
             </ul>
           )}
+          {linkedNotTransferred.length > 0 && (
+            <p className="mt-1.5 text-xs text-muted">
+              Non comptée car pas cochée « versé » : {linkedNotTransferred.map((it) => it.label || 'ligne sans nom').join(', ')}.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <h3 className="section-title mb-2">Compte courant</h3>
+          <label className="block text-sm text-ink">
+            <span className="label">Solde à la clôture (repris comme solde de départ du mois suivant)</span>
+            <AmountInput variant="field" allowEmpty placeholder="à saisir" value={closingBalance} onChange={setClosingBalance} ariaLabel="Solde à la clôture" />
+          </label>
         </div>
 
         <div>
@@ -317,7 +391,7 @@ function ClosingPanel({
           <label className="tabular flex items-start gap-2 text-sm text-ink">
             <input type="checkbox" className="mt-1" checked={recordPoint} onChange={(e) => setRecordPoint(e.target.checked)} />
             <span>
-              Enregistrer le patrimoine actuel ({formatEURRounded(wealth)}) comme point de {monthName}
+              Enregistrer le patrimoine ({formatEURRounded(wealth)}) comme point de {monthName}
               {existing && <span className="text-muted"> — remplace {formatEURRounded(existing.total)}</span>}
             </span>
           </label>
@@ -339,7 +413,7 @@ function ClosingPanel({
         <button type="button" className="btn-secondary" onClick={onCancel}>
           Annuler
         </button>
-        <button type="button" className="btn-primary" onClick={() => onConfirm(recordPoint)}>
+        <button type="button" className="btn-primary" onClick={() => onConfirm({ recordPoint, closingBalance })}>
           <CalendarCheck size={16} /> Confirmer la clôture
         </button>
       </div>
@@ -389,6 +463,7 @@ function CategoryCard({
   readOnly,
   onAdd,
   onPatch,
+  onMove,
   onDelete,
 }: {
   category: ItemCategory;
@@ -398,12 +473,20 @@ function CategoryCard({
   readOnly: boolean;
   onAdd: () => void;
   onPatch: (id: string, patch: Partial<MonthItem>) => void;
+  onMove: (fromId: string, toId: string, position: DropPosition) => void;
   onDelete: (id: string) => void;
 }) {
+  const { itemProps, handleProps } = useReorder(
+    items.map((it) => it.id),
+    onMove,
+  );
   const total = items.reduce((s, it) => s + it.amount, 0);
+  const remaining = items.filter((it) => !it.cleared).reduce((s, it) => s + it.amount, 0);
+  const labels = CLEARED_LABELS[category];
   return (
     <Card
       title={CATEGORY_LABELS[category]}
+      subtitle={items.length === 0 ? undefined : remaining > 0 ? `${labels.remaining} : ${formatEURRounded(remaining)}` : labels.allDone}
       actions={<span className="tabular text-[15px] font-semibold text-ink">{formatEURRounded(total)}</span>}
       bodyClassName="px-3 py-2"
     >
@@ -416,6 +499,8 @@ function CategoryCard({
             goals={goals}
             autoFocus={it.id === focusId}
             readOnly={readOnly}
+            rowProps={itemProps(it.id)}
+            handleProps={handleProps(it.id, it.label)}
             onPatch={onPatch}
             onDelete={onDelete}
           />
@@ -435,6 +520,8 @@ function ItemRow({
   goals,
   autoFocus,
   readOnly,
+  rowProps,
+  handleProps,
   onPatch,
   onDelete,
 }: {
@@ -442,15 +529,34 @@ function ItemRow({
   goals: { id: string; name: string }[];
   autoFocus: boolean;
   readOnly: boolean;
+  rowProps: ReturnType<ReturnType<typeof useReorder>['itemProps']>;
+  handleProps: ReturnType<ReturnType<typeof useReorder>['handleProps']>;
   onPatch: (id: string, patch: Partial<MonthItem>) => void;
   onDelete: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const linkedGoal = item.goalId ? goals.find((g) => g.id === item.goalId) : undefined;
+  const labels = CLEARED_LABELS[item.category];
 
   return (
-    <li className="group border-b border-line last:border-0">
+    <li className="reorder-item border-b border-line last:border-0" {...rowProps}>
       <div className="flex items-center gap-1 py-1">
+        {!readOnly && <DragHandle {...handleProps} />}
+        <button
+          type="button"
+          className="icon-btn shrink-0 disabled:cursor-default disabled:hover:bg-transparent"
+          title={item.cleared ? `${labels.done} ce mois-ci` : `${labels.todo} ce mois-ci`}
+          aria-label={`${labels.done} : ${item.label || 'ligne sans nom'}`}
+          aria-pressed={Boolean(item.cleared)}
+          disabled={readOnly}
+          onClick={() => onPatch(item.id, { cleared: !item.cleared })}
+        >
+          {item.cleared ? (
+            <CircleCheck size={18} className="text-[var(--good-ink)]" fill="var(--good-soft)" />
+          ) : (
+            <Circle size={18} className="text-muted" />
+          )}
+        </button>
         <div className="min-w-0 flex-1">
           <input
             className="inline-input"
@@ -471,7 +577,7 @@ function ItemRow({
           )}
         </div>
         <AmountInput
-          className="w-28 shrink-0"
+          className="w-24 shrink-0"
           value={item.amount}
           ariaLabel={`Montant ${item.label}`}
           disabled={readOnly}
@@ -527,7 +633,7 @@ function ItemRow({
           </label>
           {item.category === 'epargne' && (
             <label className="col-span-2">
-              <span className="label">Objectif alimenté par cette épargne (versée à l’objectif à la clôture du mois)</span>
+              <span className="label">Objectif alimenté par cette épargne (versée à l’objectif à la clôture, si cochée « versé »)</span>
               <select
                 className="field py-1.5"
                 value={item.goalId ?? ''}

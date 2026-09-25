@@ -3,6 +3,7 @@ import type { BackupResult, DataName, GoalsFile, MonthsFile, PatrimoineFile } fr
 import { bridge } from '../lib/bridge';
 import { currentMonthKey } from '../lib/months';
 import { ensureMonth, seedGoals, seedMonths, seedPatrimoine } from '../lib/seed';
+import { ensureCurrentAccount, isLatestBalance, withBalanceCheck, withCurrentAccountBalance } from '../lib/account';
 
 type SaveState = 'saved' | 'pending' | 'error';
 type Updater<T> = (fn: (prev: T) => T) => void;
@@ -15,10 +16,15 @@ interface DataContextValue {
   updateMonths: Updater<MonthsFile>;
   updateGoals: Updater<GoalsFile>;
   updatePatrimoine: Updater<PatrimoineFile>;
+  /** Records the current-account balance of a month; the most recent one also updates the wealth line. null clears it. */
+  recordBalance: (monthKey: string, amount: number | null) => void;
   saveState: SaveState;
   dataDir: string | null;
   warnings: string[];
   dismissWarnings: () => void;
+  /** Folder of the automatic copy made because a new version started, shown once. */
+  versionBackup: string | null;
+  dismissVersionBackup: () => void;
   backup: () => Promise<BackupResult>;
 }
 
@@ -35,6 +41,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [patrimoine, setPatrimoine] = useState<PatrimoineFile | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [versionBackup, setVersionBackup] = useState<string | null>(null);
 
   const pending = useRef(new Map<DataName, unknown>());
   const timer = useRef<number | null>(null);
@@ -68,9 +75,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .then((res) => {
         setMonths(ensureMonth(res.mois ?? seedMonths(nowKey), nowKey));
         setGoals(res.objectifs ?? seedGoals());
-        setPatrimoine(res.patrimoine ?? seedPatrimoine());
+        setPatrimoine(ensureCurrentAccount(res.patrimoine ?? seedPatrimoine()));
         setDataDir(res.dataDir);
         setWarnings(res.warnings);
+        setVersionBackup(res.versionBackup ?? null);
       })
       .catch((err: unknown) => setLoadError(String(err)));
   }, [nowKey]);
@@ -110,6 +118,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return <div className="flex h-screen items-center justify-center text-muted">Chargement…</div>;
   }
 
+  const recordBalance = (monthKey: string, amount: number | null) => {
+    if (amount === null) {
+      updateMonths((prev) => withBalanceCheck(prev, monthKey, null));
+      return;
+    }
+    const check = { amount, at: new Date().toISOString() };
+    const latest = isLatestBalance(months, monthKey);
+    updateMonths((prev) => withBalanceCheck(prev, monthKey, check));
+    if (latest) updatePatrimoine((prev) => withCurrentAccountBalance(prev, check));
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -120,10 +139,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateMonths,
         updateGoals,
         updatePatrimoine,
+        recordBalance,
         saveState,
         dataDir,
         warnings,
         dismissWarnings: () => setWarnings([]),
+        versionBackup,
+        dismissVersionBackup: () => setVersionBackup(null),
         backup,
       }}
     >

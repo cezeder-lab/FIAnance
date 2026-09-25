@@ -7,10 +7,13 @@ Application de bureau personnelle (Windows) pour suivre ses flux mensuels, ses o
 
 | Écran | Contenu |
 |---|---|
-| **Vue d'ensemble** | Cash-flow net du mois, patrimoine financier net disponible, taux d'épargne, progression des objectifs actifs, entrées prévues, évolution du patrimoine. Rappel si le mois précédent n'est pas clôturé. |
-| **Mois** | Revenus, dépenses fixes, dépenses variables, épargne/investissement. Chaque mois est indépendant ; un nouveau mois est pré-rempli avec les lignes **récurrentes** du mois précédent. Clôture du mois. Historique du cash-flow net. |
+| **Vue d'ensemble** | Cash-flow net du mois, solde du compte courant et fin de mois prévue, patrimoine financier net disponible, taux d'épargne, progression des objectifs actifs, entrées prévues, évolution du patrimoine. Rappel si le mois précédent n'est pas clôturé. |
+| **Mois** | Revenus, dépenses fixes, dépenses variables, épargne/investissement, chaque ligne cochable « reçu / payé / versé » pour le mois. Carte « Compte courant » (solde attendu, solde réel, écart). Chaque mois est indépendant ; un nouveau mois est pré-rempli avec les lignes **récurrentes** du mois précédent, décochées. Clôture du mois. Historique du cash-flow net. |
 | **Objectifs** | Montant cible, date visée, priorité, montant déjà épargné, compte lié. Progression, reste à épargner, rythme nécessaire et badge vert/orange/rouge selon l'épargne liée à l'objectif dans le mois en cours. Entrées d'argent prévues (ex. vente de la Fabia). |
-| **Patrimoine** | Livrets, placements et crypto, qui forment le « patrimoine financier net disponible ». ETF et crypto en quantité × cours. Historique mois par mois. |
+| **Patrimoine** | Compte courant, livrets, placements et crypto, qui forment le « patrimoine financier net disponible ». ETF et crypto en quantité × cours. Historique mois par mois. |
+
+Toutes les lignes (du mois, du patrimoine, les objectifs) se réordonnent en glissant la poignée ⋮⋮ à leur gauche, ou avec les
+flèches haut / bas quand la poignée a le focus. L'ordre est repris le mois suivant.
 | **Simulateurs** | Projection du patrimoine à 12 ou 24 mois, intérêts composés (brut et net de fiscalité à la sortie, courbe + tableau) et rythme d'épargne nécessaire pour un objectif. |
 
 Règles de calcul :
@@ -21,14 +24,28 @@ Règles de calcul :
   **Rythme actuel** = somme des lignes d'épargne du mois en cours liées à l'objectif (bouton « Options » d'une ligne d'épargne).
   Badge vert si actuel ≥ nécessaire, orange si actuel ≥ 50 % du nécessaire, rouge en dessous ou si l'échéance est dépassée.
 
+### Compte courant
+
+Carte de l'écran Mois qui confronte le budget au relevé bancaire :
+
+- **Solde de départ** (avant le salaire) : repris automatiquement du dernier solde relevé le mois précédent, modifiable.
+- **Solde attendu** = solde de départ + revenus cochés « reçu » − dépenses cochées « payé » − épargne cochée « versé ».
+- **Solde réel** : ce qu'affiche votre banque, saisi quand vous voulez (la date est conservée). Il alimente aussi la ligne
+  « Compte courant » du patrimoine, qui peut elle-même être modifiée depuis l'écran Patrimoine.
+- **Écart** = solde réel − solde attendu. Négatif, il signale des dépenses oubliées : le bouton « Ajouter l'écart en dépense
+  variable » crée une ligne « Dépenses non identifiées » (ponctuelle, déjà payée) qui ramène l'écart à zéro.
+- **Solde de fin de mois prévu** = solde réel (ou attendu) + ce qui reste à recevoir − à payer − à verser.
+
 ### Clôture du mois
 
 « Clôturer le mois » (écran Mois, ou le rappel de la vue d'ensemble pour le mois précédent) :
 
-1. ajoute au « montant déjà épargné » de chaque objectif l'épargne du mois qui lui est liée ;
-2. enregistre le patrimoine financier disponible du moment comme point du mois (case cochée par défaut pour le mois en cours
+1. signale les lignes pas encore cochées ;
+2. ajoute au « montant déjà épargné » de chaque objectif l'épargne du mois qui lui est liée **et cochée « versé »** ;
+3. enregistre le solde du compte courant à la clôture (il devient le solde de départ du mois suivant) ;
+4. enregistre le patrimoine financier disponible du moment comme point du mois (case cochée par défaut pour le mois en cours
    et le mois précédent, décochée pour un mois plus ancien afin de ne pas écraser son point avec les soldes du jour) ;
-3. verrouille le mois.
+5. verrouille le mois.
 
 « Rouvrir le mois » retire des objectifs l'épargne versée à la clôture et déverrouille les lignes ; le point de patrimoine est conservé.
 
@@ -72,14 +89,20 @@ npm version patch          # met à jour package.json et crée le tag vX.Y.Z
 git push --follow-tags
 ```
 
+Si la version de `package.json` a déjà été changée (ex. `0.2.0`), il suffit de créer et pousser le tag correspondant :
+`git tag v0.2.0` puis `git push origin v0.2.0`.
+
 Le workflow échoue si le tag ne correspond pas à la version de `package.json`.
 L'installeur n'est pas signé : Windows SmartScreen affichera un avertissement au premier lancement (« Informations complémentaires » → « Exécuter quand même »).
 
 ## Données
 
 - Emplacement : `%APPDATA%\FIAnance\data\` (`mois.json`, `objectifs.json`, `patrimoine.json`), en dehors du dossier d'installation : elles survivent aux mises à jour.
-  Le bouton « Dossier des données » de l'application l'ouvre directement.
+  Le bouton « Dossier des données » de l'application l'ouvre directement. `npm run dev` utilise le même dossier.
 - Sauvegarde automatique à chaque modification (écriture atomique, fichier temporaire puis renommage).
+- Au premier lancement d'une nouvelle version, les trois fichiers sont copiés tels quels dans
+  `sauvegardes\avant-<version>_<date>\` avant d'être lus ; `app-version.json` retient la dernière version lancée.
+  Les nouvelles versions n'ajoutent que des champs facultatifs : les fichiers des versions précédentes restent lisibles.
 - « Exporter une sauvegarde » copie les trois fichiers, horodatés, dans le dossier de votre choix. Pour restaurer, fermez l'application et replacez les fichiers dans le dossier des données en retirant le suffixe horodaté.
 - Si un fichier devient illisible, il est mis de côté (`*.illisible_<date>.json`) au lieu d'être écrasé.
 - `src/seed/seed.json` contient les données de démarrage, utilisées uniquement au tout premier lancement. Aucune donnée réelle n'est versionnée (voir `.gitignore`).
@@ -92,7 +115,7 @@ electron/          processus principal : fenêtre, IPC, lecture/écriture des JS
   preload.js       API exposée à l'interface (contextIsolation, sandbox)
   storage.js
 src/
-  lib/             calculs (cash-flow, objectifs, intérêts composés), dates, formats
+  lib/             calculs (cash-flow, compte courant, objectifs, intérêts composés), dates, formats
   state/           chargement, état et sauvegarde automatique
   views/           un fichier par écran
   components/      éléments d'interface partagés
