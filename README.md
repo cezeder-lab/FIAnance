@@ -8,10 +8,11 @@ Application de bureau personnelle (Windows) pour suivre ses flux mensuels, ses o
 | Écran | Contenu |
 |---|---|
 | **Vue d'ensemble** | Cash-flow net du mois, solde du compte courant et fin de mois prévue, patrimoine financier net disponible, taux d'épargne, progression des objectifs actifs, entrées prévues, évolution du patrimoine. Rappel si le mois précédent n'est pas clôturé. |
-| **Mois** | Revenus, dépenses fixes, dépenses variables, épargne/investissement, chaque ligne cochable « reçu / payé / versé » pour le mois. Carte « Compte courant » (solde attendu, solde réel, écart). Chaque mois est indépendant ; un nouveau mois est pré-rempli avec les lignes **récurrentes** du mois précédent, décochées. Clôture du mois. Historique du cash-flow net. |
+| **Mois** | Revenus, dépenses fixes, dépenses variables, épargne/investissement, chaque ligne cochable « reçu / payé / versé » pour le mois. Bandeau en haut du mois : cash-flow net, solde du compte courant, fin de mois prévue et écart avec le relevé. Chaque mois est indépendant ; un nouveau mois est pré-rempli avec les lignes **récurrentes** du mois précédent, décochées. Clôture du mois. Historique du cash-flow net. |
 | **Objectifs** | Montant cible, date visée, priorité, montant déjà épargné, compte lié. Progression, reste à épargner, rythme nécessaire et badge vert/orange/rouge selon l'épargne liée à l'objectif dans le mois en cours. Entrées d'argent prévues (ex. vente de la Fabia). |
 | **Patrimoine** | Compte courant, livrets, placements et crypto, qui forment le « patrimoine financier net disponible ». ETF et crypto en quantité × cours. Historique mois par mois. |
 
+Dans l'écran Mois, la poignée, les options et la suppression d'une ligne n'apparaissent qu'au survol.
 Toutes les lignes (du mois, du patrimoine, les objectifs) se réordonnent en glissant la poignée ⋮⋮ à leur gauche, ou avec les
 flèches haut / bas quand la poignée a le focus. L'ordre est repris le mois suivant.
 | **Simulateurs** | Projection du patrimoine à 12 ou 24 mois, intérêts composés (brut et net de fiscalité à la sortie, courbe + tableau) et rythme d'épargne nécessaire pour un objectif. |
@@ -26,14 +27,13 @@ Règles de calcul :
 
 ### Compte courant
 
-Carte de l'écran Mois qui confronte le budget au relevé bancaire :
+Le bandeau en haut de l'écran Mois confronte le budget au relevé bancaire (« Détail du calcul » déplie les deux calculs) :
 
 - **Solde de départ** (avant le salaire) : repris automatiquement du dernier solde relevé le mois précédent, modifiable.
 - **Solde attendu** = solde de départ + revenus cochés « reçu » − dépenses cochées « payé » − épargne cochée « versé ».
 - **Solde réel** : ce qu'affiche votre banque, saisi quand vous voulez (la date est conservée). Il alimente aussi la ligne
   « Compte courant » du patrimoine, qui peut elle-même être modifiée depuis l'écran Patrimoine.
-- **Écart** = solde réel − solde attendu. Négatif, il signale des dépenses oubliées : le bouton « Ajouter l'écart en dépense
-  variable » crée une ligne « Dépenses non identifiées » (ponctuelle, déjà payée) qui ramène l'écart à zéro.
+- **Écart** = solde réel − solde attendu. Négatif, il signale des dépenses oubliées : le lien « ajouter en dépense » crée une ligne « Dépenses non identifiées » (ponctuelle, déjà payée) qui ramène l'écart à zéro.
 - **Solde de fin de mois prévu** = solde réel (ou attendu) + ce qui reste à recevoir − à payer − à verser.
 
 ### Clôture du mois

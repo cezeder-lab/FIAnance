@@ -122,6 +122,11 @@ body {
     @apply text-xs font-semibold uppercase tracking-wide text-muted;
   }
 
+  /* Row actions stay out of the way until the row is hovered or one of its controls has the focus. */
+  .row-action {
+    @apply opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100;
+  }
+
   /* Drop indicator for drag-and-drop reordering (see components/Reorder.tsx). */
   .reorder-item[data-drop='before'] {
     box-shadow: inset 0 2px 0 var(--accent);

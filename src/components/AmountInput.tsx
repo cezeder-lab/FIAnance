@@ -26,6 +26,8 @@ interface Props {
   maxDecimals?: number;
   disabled?: boolean;
   className?: string;
+  /** Extra classes for the input itself, e.g. a larger font. */
+  inputClassName?: string;
   autoFocus?: boolean;
 }
 
@@ -40,6 +42,7 @@ export function AmountInput({
   maxDecimals = 2,
   disabled = false,
   className = '',
+  inputClassName = '',
   autoFocus,
 }: Props) {
   const [draft, setDraft] = useState<string | null>(null);
@@ -48,7 +51,7 @@ export function AmountInput({
   return (
     <div className={`relative ${className}`}>
       <input
-        className={`${variant === 'inline' ? 'inline-input' : 'field'} tabular text-right`}
+        className={`${variant === 'inline' ? 'inline-input' : 'field'} tabular text-right ${inputClassName}`}
         style={{ paddingRight: `calc(1rem + ${suffix.length}ch)` }}
         inputMode="decimal"
         value={shown}

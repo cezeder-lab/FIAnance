@@ -65,11 +65,11 @@ export function useReorder(ids: string[], onMove: (fromId: string, toId: string,
   return { itemProps, handleProps };
 }
 
-export function DragHandle(props: ButtonHTMLAttributes<HTMLButtonElement>) {
+export function DragHandle({ className = 'opacity-60', ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
-      className="inline-flex h-7 w-5 shrink-0 cursor-grab items-center justify-center rounded text-muted opacity-60 hover:bg-sunken hover:text-ink hover:opacity-100 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent active:cursor-grabbing"
+      className={`inline-flex h-7 w-5 shrink-0 cursor-grab items-center justify-center rounded text-muted hover:bg-sunken hover:text-ink hover:opacity-100 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent active:cursor-grabbing ${className}`}
       {...props}
     >
       <GripVertical size={14} />

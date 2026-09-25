@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   CalendarCheck,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,
@@ -9,7 +10,6 @@ import {
   Link2,
   LockOpen,
   Plus,
-  Repeat,
   SlidersHorizontal,
   TriangleAlert,
 } from 'lucide-react';
@@ -26,17 +26,17 @@ import {
   withHistoryPoint,
 } from '../lib/calc';
 import { accountSummary, currentAccountLine, isLatestBalance } from '../lib/account';
-import { formatEURRounded, formatPercent } from '../lib/format';
+import { formatEURRounded } from '../lib/format';
 import { addMonths, formatDay, formatMonthLong, formatMonthShort, toMonthKey } from '../lib/months';
 import { moveById, type DropPosition } from '../lib/reorder';
 import { carryOver, previousMonthWithData, uid } from '../lib/seed';
 import { CATEGORY_LABELS, CATEGORY_SINGULAR, CLEARED_LABELS } from '../lib/labels';
 import { AmountInput } from '../components/AmountInput';
 import { ConfirmDelete } from '../components/ConfirmDelete';
-import { Card, PageHeader } from '../components/Layout';
+import { Card } from '../components/Layout';
 import { DragHandle, useReorder } from '../components/Reorder';
 import { TrendChart } from '../components/TrendChart';
-import { AccountCard } from './AccountCard';
+import { MonthSummary } from './MonthSummary';
 
 const COLUMNS: ItemCategory[][] = [
   ['revenu', 'epargne'],
@@ -61,6 +61,7 @@ export function MonthView({
 }) {
   const { months, goals, nowKey, updateMonths, updateGoals, updatePatrimoine, recordBalance } = useData();
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [showTable, setShowTable] = useState(false);
   // Tied to a month so that navigating elsewhere hides the panel.
   const [closingMonth, setClosingMonth] = useState<string | null>(openClosing ? month : null);
@@ -150,43 +151,42 @@ export function MonthView({
 
   return (
     <div>
-      <PageHeader
-        title={formatMonthLong(month)}
-        subtitle={closure ? `${period} · clôturé le ${formatDay(closure.closedAt)}` : period}
-        actions={
-          <>
-            {month !== nowKey && (
-              <button type="button" className="btn-ghost" onClick={() => setMonth(nowKey)}>
-                Revenir au mois en cours
-              </button>
-            )}
-            {closure && (
-              <button
-                type="button"
-                className="btn-secondary"
-                title="Déverrouille le mois et retire des objectifs l’épargne versée à la clôture"
-                onClick={reopen}
-              >
-                <LockOpen size={15} /> Rouvrir le mois
-              </button>
-            )}
-            {canClose && !closing && (
-              <button type="button" className="btn-primary" onClick={() => setClosingMonth(month)}>
-                <CalendarCheck size={16} /> Clôturer le mois
-              </button>
-            )}
-            <div className="flex items-center rounded-lg border border-line bg-surface">
-              <button type="button" className="icon-btn m-0.5" aria-label="Mois précédent" onClick={() => setMonth(addMonths(month, -1))}>
-                <ChevronLeft size={17} />
-              </button>
-              <span className="min-w-[8.5rem] px-2 text-center text-sm font-medium text-ink">{formatMonthLong(month)}</span>
-              <button type="button" className="icon-btn m-0.5" aria-label="Mois suivant" onClick={() => setMonth(addMonths(month, 1))}>
-                <ChevronRight size={17} />
-              </button>
-            </div>
-          </>
-        }
-      />
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="-ml-2 flex items-center gap-1">
+            <button type="button" className="icon-btn h-8 w-8" aria-label="Mois précédent" onClick={() => setMonth(addMonths(month, -1))}>
+              <ChevronLeft size={20} />
+            </button>
+            <h1 className="min-w-[11rem] text-2xl font-semibold tracking-tight text-ink">{formatMonthLong(month)}</h1>
+            <button type="button" className="icon-btn h-8 w-8" aria-label="Mois suivant" onClick={() => setMonth(addMonths(month, 1))}>
+              <ChevronRight size={20} />
+            </button>
+          </div>
+          <p className="mt-1 text-sm text-ink-2">{closure ? `${period} · clôturé le ${formatDay(closure.closedAt)}` : period}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {month !== nowKey && (
+            <button type="button" className="btn-ghost" onClick={() => setMonth(nowKey)}>
+              Revenir au mois en cours
+            </button>
+          )}
+          {closure && (
+            <button
+              type="button"
+              className="btn-secondary"
+              title="Déverrouille le mois et retire des objectifs l’épargne versée à la clôture"
+              onClick={reopen}
+            >
+              <LockOpen size={15} /> Rouvrir le mois
+            </button>
+          )}
+          {canClose && !closing && (
+            <button type="button" className="btn-primary" onClick={() => setClosingMonth(month)}>
+              <CalendarCheck size={16} /> Clôturer le mois
+            </button>
+          )}
+        </div>
+      </header>
 
       {closing && canClose && (
         <ClosingPanel
@@ -215,9 +215,14 @@ export function MonthView({
         </div>
       ) : (
         <>
-          <CashflowSummary totals={totals} />
-
-          {month <= nowKey && <AccountCard month={month} readOnly={readOnly} onAddUnidentified={addUnidentified} />}
+          <MonthSummary
+            key={month}
+            month={month}
+            totals={totals}
+            withAccount={month <= nowKey}
+            readOnly={readOnly}
+            onAddUnidentified={addUnidentified}
+          />
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
             {COLUMNS.map((col) => (
@@ -242,62 +247,66 @@ export function MonthView({
         </>
       )}
 
-      <Card
-        className="mt-6"
-        title="Historique du cash-flow net"
-        subtitle="Cliquez sur un point pour ouvrir le mois correspondant."
-        actions={
-          <button type="button" className="btn-ghost" onClick={() => setShowTable((s) => !s)}>
-            {showTable ? 'Masquer le détail' : 'Voir le détail'}
-          </button>
-        }
-      >
-        <TrendChart
-          data={history}
-          seriesName="Cash-flow net"
-          onPointClick={setMonth}
-          emptyText="La courbe apparaîtra dès le deuxième mois saisi."
-        />
-        {showTable && (
-          <table className="tabular mt-5 w-full text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs text-muted">
-                <th className="py-2 font-medium">Mois</th>
-                <th className="py-2 text-right font-medium">Revenus</th>
-                <th className="py-2 text-right font-medium">Dépenses</th>
-                <th className="py-2 text-right font-medium">Épargne</th>
-                <th className="py-2 text-right font-medium">Cash-flow net</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...history].reverse().map((h) => (
-                <tr
-                  key={h.key}
-                  className={`cursor-pointer border-b border-line last:border-0 hover:bg-sunken ${h.key === month ? 'bg-accent-soft' : ''}`}
-                  onClick={() => setMonth(h.key)}
-                >
-                  <td className="py-2">
-                    <span className="inline-flex items-center gap-1.5">
-                      {formatMonthLong(h.key)}
-                      {h.closed && <CalendarCheck size={13} className="text-[var(--good-ink)]" aria-label="clôturé" />}
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">{formatEURRounded(h.totals.revenus)}</td>
-                  <td className="py-2 text-right">{formatEURRounded(h.totals.depensesFixes + h.totals.depensesVariables)}</td>
-                  <td className="py-2 text-right">{formatEURRounded(h.totals.epargne)}</td>
-                  <td className={`py-2 text-right font-semibold ${h.value < 0 ? 'text-negative' : 'text-ink'}`}>{formatEURRounded(h.value)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+        <button type="button" className="btn-ghost -ml-3" aria-expanded={showHistory} onClick={() => setShowHistory((s) => !s)}>
+          {showHistory ? <ChevronDown size={16} /> : <ChevronRight size={16} />} Historique du cash-flow net
+        </button>
+        {data && !readOnly && (
+          <span className="flex items-center gap-2 text-xs text-muted">
+            Supprimer toutes les lignes de ce mois
+            <ConfirmDelete label="Supprimer ce mois" onConfirm={deleteMonth} />
+          </span>
         )}
-      </Card>
+      </div>
 
-      {data && !readOnly && (
-        <div className="mt-6 flex items-center justify-end gap-2 text-xs text-muted">
-          Supprimer toutes les lignes de ce mois
-          <ConfirmDelete label="Supprimer ce mois" onConfirm={deleteMonth} />
-        </div>
+      {showHistory && (
+        <Card className="mt-2">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-xs text-muted">Cliquez sur un point pour ouvrir le mois correspondant.</p>
+            <button type="button" className="btn-ghost py-1 text-xs" onClick={() => setShowTable((s) => !s)}>
+              {showTable ? 'Masquer le tableau' : 'Voir le tableau'}
+            </button>
+          </div>
+          <TrendChart
+            data={history}
+            seriesName="Cash-flow net"
+            onPointClick={setMonth}
+            emptyText="La courbe apparaîtra dès le deuxième mois saisi."
+          />
+          {showTable && (
+            <table className="tabular mt-5 w-full text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-xs text-muted">
+                  <th className="py-2 font-medium">Mois</th>
+                  <th className="py-2 text-right font-medium">Revenus</th>
+                  <th className="py-2 text-right font-medium">Dépenses</th>
+                  <th className="py-2 text-right font-medium">Épargne</th>
+                  <th className="py-2 text-right font-medium">Cash-flow net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...history].reverse().map((h) => (
+                  <tr
+                    key={h.key}
+                    className={`cursor-pointer border-b border-line last:border-0 hover:bg-sunken ${h.key === month ? 'bg-accent-soft' : ''}`}
+                    onClick={() => setMonth(h.key)}
+                  >
+                    <td className="py-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        {formatMonthLong(h.key)}
+                        {h.closed && <CalendarCheck size={13} className="text-[var(--good-ink)]" aria-label="clôturé" />}
+                      </span>
+                    </td>
+                    <td className="py-2 text-right">{formatEURRounded(h.totals.revenus)}</td>
+                    <td className="py-2 text-right">{formatEURRounded(h.totals.depensesFixes + h.totals.depensesVariables)}</td>
+                    <td className="py-2 text-right">{formatEURRounded(h.totals.epargne)}</td>
+                    <td className={`py-2 text-right font-semibold ${h.value < 0 ? 'text-negative' : 'text-ink'}`}>{formatEURRounded(h.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
       )}
     </div>
   );
@@ -421,40 +430,6 @@ function ClosingPanel({
   );
 }
 
-function CashflowSummary({ totals }: { totals: ReturnType<typeof monthTotals> }) {
-  const parts: { label: string; value: number; sign: '' | '−' }[] = [
-    { label: 'Revenus', value: totals.revenus, sign: '' },
-    { label: 'Dépenses fixes', value: totals.depensesFixes, sign: '−' },
-    { label: 'Dépenses variables', value: totals.depensesVariables, sign: '−' },
-    { label: 'Épargne allouée', value: totals.epargne, sign: '−' },
-  ];
-  return (
-    <div className="card flex flex-wrap items-center gap-x-10 gap-y-5 p-6">
-      <div>
-        <div className="text-sm font-medium text-ink-2">Cash-flow net du mois</div>
-        <div className={`mt-1 text-5xl font-semibold tracking-tight ${totals.cashflow < 0 ? 'text-negative' : 'text-positive'}`}>
-          {formatEURRounded(totals.cashflow)}
-        </div>
-        <div className="mt-2 text-sm text-ink-2">
-          Reste disponible après dépenses et épargne
-          {totals.savingsRate !== null && <> · taux d’épargne {formatPercent(totals.savingsRate)}</>}
-        </div>
-      </div>
-      <div className="tabular ml-auto flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        {parts.map((p) => (
-          <div key={p.label} className="flex items-center gap-4">
-            {p.sign && <span className="text-lg text-muted">{p.sign}</span>}
-            <div>
-              <div className="text-xs text-muted">{p.label}</div>
-              <div className="font-semibold text-ink">{formatEURRounded(p.value)}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function CategoryCard({
   category,
   items,
@@ -537,11 +512,13 @@ function ItemRow({
   const [open, setOpen] = useState(false);
   const linkedGoal = item.goalId ? goals.find((g) => g.id === item.goalId) : undefined;
   const labels = CLEARED_LABELS[item.category];
+  // Secondary actions only show on hover, focus, or while the options panel is open.
+  const actionClass = open ? '' : 'row-action';
 
   return (
-    <li className="reorder-item border-b border-line last:border-0" {...rowProps}>
+    <li className="reorder-item group border-b border-line last:border-0" {...rowProps}>
       <div className="flex items-center gap-1 py-1">
-        {!readOnly && <DragHandle {...handleProps} />}
+        {!readOnly && <DragHandle className={actionClass} {...handleProps} />}
         <button
           type="button"
           className="icon-btn shrink-0 disabled:cursor-default disabled:hover:bg-transparent"
@@ -568,11 +545,14 @@ function ItemRow({
             disabled={readOnly}
             onChange={(e) => onPatch(item.id, { label: e.target.value })}
           />
-          {linkedGoal && (
-            <div className="flex flex-wrap gap-1.5 px-2 pb-1">
-              <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
-                <Link2 size={11} /> {linkedGoal.name}
-              </span>
+          {(linkedGoal || !item.recurring) && (
+            <div className="flex flex-wrap gap-x-3 px-2 pb-0.5 text-[11px] text-muted">
+              {linkedGoal && (
+                <span className="inline-flex min-w-0 items-center gap-1 text-accent">
+                  <Link2 size={11} className="shrink-0" /> <span className="truncate">{linkedGoal.name}</span>
+                </span>
+              )}
+              {!item.recurring && <span>ponctuel</span>}
             </div>
           )}
         </div>
@@ -583,19 +563,8 @@ function ItemRow({
           disabled={readOnly}
           onChange={(v) => onPatch(item.id, { amount: v ?? 0 })}
         />
-        <button
-          type="button"
-          className={`icon-btn ${item.recurring ? 'text-accent' : 'opacity-60'} disabled:cursor-default disabled:hover:bg-transparent`}
-          title={item.recurring ? 'Récurrent : repris le mois suivant' : 'Ponctuel : non repris le mois suivant'}
-          aria-label="Récurrent"
-          aria-pressed={item.recurring}
-          disabled={readOnly}
-          onClick={() => onPatch(item.id, { recurring: !item.recurring })}
-        >
-          <Repeat size={15} />
-        </button>
         {!readOnly && (
-          <>
+          <div className={`flex shrink-0 items-center ${actionClass}`}>
             <button
               type="button"
               className={`icon-btn ${open ? 'bg-sunken text-ink' : ''}`}
@@ -607,7 +576,7 @@ function ItemRow({
               <SlidersHorizontal size={15} />
             </button>
             <ConfirmDelete onConfirm={() => onDelete(item.id)} />
-          </>
+          </div>
         )}
       </div>
 
