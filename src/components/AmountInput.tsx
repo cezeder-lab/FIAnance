@@ -1,7 +1,18 @@
 import { useState } from 'react';
 import { parseAmount } from '../lib/format';
 
-const display = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
+const formatters = new Map<string, Intl.NumberFormat>();
+function formatNumber(value: number, maxDecimals: number): string {
+  // Euro amounts with cents read as "12,50", not "12,5".
+  const minDecimals = maxDecimals === 2 && !Number.isInteger(value) ? 2 : 0;
+  const key = `${minDecimals}-${maxDecimals}`;
+  let f = formatters.get(key);
+  if (!f) {
+    f = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: minDecimals, maximumFractionDigits: maxDecimals });
+    formatters.set(key, f);
+  }
+  return f.format(value);
+}
 
 interface Props {
   value: number | null;
@@ -12,6 +23,8 @@ interface Props {
   placeholder?: string;
   ariaLabel?: string;
   suffix?: string;
+  maxDecimals?: number;
+  disabled?: boolean;
   className?: string;
   autoFocus?: boolean;
 }
@@ -24,11 +37,13 @@ export function AmountInput({
   placeholder,
   ariaLabel,
   suffix = '€',
+  maxDecimals = 2,
+  disabled = false,
   className = '',
   autoFocus,
 }: Props) {
   const [draft, setDraft] = useState<string | null>(null);
-  const shown = draft ?? (value === null ? '' : display.format(value));
+  const shown = draft ?? (value === null ? '' : formatNumber(value, maxDecimals));
 
   return (
     <div className={`relative ${className}`}>
@@ -40,6 +55,7 @@ export function AmountInput({
         placeholder={placeholder}
         aria-label={ariaLabel}
         autoFocus={autoFocus}
+        disabled={disabled}
         onFocus={(e) => {
           // Keep the displayed text as-is: rewriting it here would move the caret mid-edit.
           setDraft(shown);
@@ -58,7 +74,7 @@ export function AmountInput({
           if (e.key === 'Enter') e.currentTarget.blur();
         }}
       />
-      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted">{suffix}</span>
+      {suffix && <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted">{suffix}</span>}
     </div>
   );
 }

@@ -2,24 +2,50 @@
 
 Application de bureau personnelle (Windows) pour suivre ses flux mensuels, ses objectifs d'achat et son patrimoine.
 100 % locale : aucune connexion bancaire, aucun cloud. Toutes les données sont saisies à la main et stockées en JSON sur la machine.
+Seule exception, à la demande : le bouton « Actualiser les cours » interroge Yahoo Finance (voir plus bas).
 
 ## Modules
 
 | Écran | Contenu |
 |---|---|
-| **Vue d'ensemble** | Cash-flow net du mois, patrimoine financier net disponible, taux d'épargne, progression des objectifs actifs, entrées prévues, évolution du patrimoine. |
-| **Mois** | Revenus, dépenses fixes, dépenses variables, épargne/investissement. Chaque mois est indépendant ; un nouveau mois est pré-rempli avec les lignes **récurrentes** du mois précédent. Historique du cash-flow net. |
+| **Vue d'ensemble** | Cash-flow net du mois, patrimoine financier net disponible, taux d'épargne, progression des objectifs actifs, entrées prévues, évolution du patrimoine. Rappel si le mois précédent n'est pas clôturé. |
+| **Mois** | Revenus, dépenses fixes, dépenses variables, épargne/investissement. Chaque mois est indépendant ; un nouveau mois est pré-rempli avec les lignes **récurrentes** du mois précédent. Clôture du mois. Historique du cash-flow net. |
 | **Objectifs** | Montant cible, date visée, priorité, montant déjà épargné, compte lié. Progression, reste à épargner, rythme nécessaire et badge vert/orange/rouge selon l'épargne liée à l'objectif dans le mois en cours. Entrées d'argent prévues (ex. vente de la Fabia). |
-| **Patrimoine** | Financier (liquide, investi, crypto), immobilier/familial et héritage potentiel, affichés séparément. Seul le financier compte dans le « patrimoine financier net disponible ». Historique mois par mois. |
-| **Simulateurs** | Intérêts composés (brut et net de fiscalité à la sortie, courbe + tableau) et rythme d'épargne nécessaire pour un objectif. |
+| **Patrimoine** | Financier (liquide, investi, crypto), immobilier/familial et héritage potentiel, affichés séparément. Seul le financier compte dans le « patrimoine financier net disponible ». ETF et crypto en quantité × cours. Historique mois par mois. |
+| **Simulateurs** | Projection du patrimoine à 12 ou 24 mois, intérêts composés (brut et net de fiscalité à la sortie, courbe + tableau) et rythme d'épargne nécessaire pour un objectif. |
 
 Règles de calcul :
 
-- **Cash-flow net** = revenus encaissés − dépenses fixes − dépenses variables − épargne allouée.
-  Les revenus marqués « avantage en nature » (ex. véhicule de fonction) sont affichés mais exclus du cash-flow.
-- **Rythme nécessaire** = reste à épargner ÷ mois restants avant la date visée, arrondi à l'euro supérieur.
+- **Cash-flow net** = revenus − dépenses fixes − dépenses variables − épargne allouée.
+- **Rythme nécessaire** = reste à épargner ÷ mois restants avant la date visée (mois visé exclu), arrondi à l'euro supérieur.
+  Une fois le mois en cours clôturé, le décompte part du mois suivant.
   **Rythme actuel** = somme des lignes d'épargne du mois en cours liées à l'objectif (bouton « Options » d'une ligne d'épargne).
   Badge vert si actuel ≥ nécessaire, orange si actuel ≥ 50 % du nécessaire, rouge en dessous ou si l'échéance est dépassée.
+
+### Clôture du mois
+
+« Clôturer le mois » (écran Mois, ou le rappel de la vue d'ensemble pour le mois précédent) :
+
+1. ajoute au « montant déjà épargné » de chaque objectif l'épargne du mois qui lui est liée ;
+2. enregistre le patrimoine financier disponible du moment comme point du mois (case cochée par défaut pour le mois en cours
+   et le mois précédent, décochée pour un mois plus ancien afin de ne pas écraser son point avec les soldes du jour) ;
+3. verrouille le mois.
+
+« Rouvrir le mois » retire des objectifs l'épargne versée à la clôture et déverrouille les lignes ; le point de patrimoine est conservé.
+
+### Quantité × cours et cours en ligne
+
+Une ligne du patrimoine financier peut être valorisée en « Quantité × cours » (bouton « Options » de la ligne) : le montant suit
+alors quantité × cours. Le cours se saisit à la main, ou se récupère avec « Actualiser les cours » pour les lignes qui ont un
+symbole Yahoo Finance coté en euros (`VUAA.DE` pour VUAA sur Xetra, préréglé ; `BTC-EUR`, `ETH-EUR`, `SOL-EUR` fonctionnent aussi).
+Seul le symbole est envoyé, uniquement au clic. Une cotation dans une autre devise (ex. `VUAA.L` en USD) est refusée.
+
+### Projection du patrimoine
+
+Part du patrimoine financier disponible actuel et applique, chaque mois : l'épargne liée aux objectifs sur les livrets, le reste
+de l'épargne sur les placements, et deux scénarios pour le cash-flow net (non épargné / entièrement épargné). Rendements supposés
+modifiables (placements 7 %/an, livrets 1,5 %/an), crypto maintenue à sa valeur actuelle. Les entrées prévues (estimation basse)
+et les achats datés de l'onglet Objectifs s'ajoutent ou se retranchent à leur date.
 
 ## Développement
 
@@ -68,6 +94,7 @@ electron/          processus principal : fenêtre, IPC, lecture/écriture des JS
   main.js
   preload.js       API exposée à l'interface (contextIsolation, sandbox)
   storage.js
+  quotes.js        cours Yahoo Finance, appelé uniquement au clic
 src/
   lib/             calculs (cash-flow, objectifs, intérêts composés), dates, formats
   state/           chargement, état et sauvegarde automatique

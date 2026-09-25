@@ -1,7 +1,6 @@
 {
   "monthItems": [
     { "label": "Salaire net", "amount": 4150, "category": "revenu", "recurring": true },
-    { "label": "Avantage véhicule (valeur estimée)", "amount": 725, "category": "revenu", "recurring": true, "inKind": true },
     { "label": "Loyer", "amount": 922, "category": "depense_fixe", "recurring": true },
     { "label": "Énergie", "amount": 110, "category": "depense_fixe", "recurring": true },
     { "label": "Assurance", "amount": 12, "category": "depense_fixe", "recurring": true },
@@ -86,10 +85,10 @@
     "financier": [
       { "label": "Livret A", "amount": 0, "kind": "liquide" },
       { "label": "LDDS (épargne Cartier)", "amount": 1500, "kind": "liquide" },
-      { "label": "Compte-titres ETF S&P 500 (VUAA)", "amount": 0, "kind": "investi" },
-      { "label": "Bitcoin (BTC)", "amount": 0, "kind": "crypto" },
-      { "label": "Ethereum (ETH)", "amount": 0, "kind": "crypto" },
-      { "label": "Solana (SOL)", "amount": 0, "kind": "crypto" }
+      { "label": "Compte-titres ETF S&P 500 (VUAA)", "amount": 0, "kind": "investi", "valuation": "quantite", "quoteSymbol": "VUAA.DE" },
+      { "label": "Bitcoin (BTC)", "amount": 0, "kind": "crypto", "valuation": "quantite" },
+      { "label": "Ethereum (ETH)", "amount": 0, "kind": "crypto", "valuation": "quantite" },
+      { "label": "Solana (SOL)", "amount": 0, "kind": "crypto", "valuation": "quantite" }
     ],
     "immobilier": [],
     "heritage": []

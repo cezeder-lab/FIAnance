@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, CopyPlus, Gift, Link2, Plus, Repeat, SlidersHorizontal } from 'lucide-react';
+import { CalendarCheck, ChevronLeft, ChevronRight, CopyPlus, Link2, LockOpen, Plus, Repeat, SlidersHorizontal, TriangleAlert } from 'lucide-react';
+import type { Nav } from '../App';
 import type { ItemCategory, MonthItem } from '../types';
 import { useData } from '../state/DataContext';
-import { monthTotals, sortedMonthKeys } from '../lib/calc';
+import { applyContributions, availableWealth, monthContributions, monthTotals, sortedMonthKeys, withHistoryPoint } from '../lib/calc';
 import { formatEURRounded, formatPercent } from '../lib/format';
-import { addMonths, formatMonthLong, formatMonthShort } from '../lib/months';
+import { addMonths, formatDay, formatMonthLong, formatMonthShort, toMonthKey } from '../lib/months';
 import { carryOver, previousMonthWithData, uid } from '../lib/seed';
 import { CATEGORY_LABELS, CATEGORY_SINGULAR } from '../lib/labels';
 import { AmountInput } from '../components/AmountInput';
@@ -17,20 +18,36 @@ const COLUMNS: ItemCategory[][] = [
   ['depense_fixe', 'depense_variable'],
 ];
 
-export function MonthView({ month, setMonth }: { month: string; setMonth: (m: string) => void }) {
-  const { months, goals, nowKey, updateMonths } = useData();
+export function MonthView({
+  month,
+  setMonth,
+  nav,
+  openClosing = false,
+}: {
+  month: string;
+  setMonth: (m: string) => void;
+  nav: Nav;
+  openClosing?: boolean;
+}) {
+  const { months, goals, nowKey, updateMonths, updateGoals, updatePatrimoine } = useData();
   const [focusId, setFocusId] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
+  // Tied to a month so that navigating elsewhere hides the panel.
+  const [closingMonth, setClosingMonth] = useState<string | null>(openClosing ? month : null);
+  const closing = closingMonth === month;
 
   const data = months.months[month];
   const items = data?.items ?? [];
+  const closure = data?.closure;
+  const readOnly = Boolean(closure);
+  const canClose = Boolean(data) && !closure && month <= nowKey;
   const totals = monthTotals(items);
   const prevWithData = previousMonthWithData(months, month);
 
   const setItems = (fn: (items: MonthItem[]) => MonthItem[]) =>
     updateMonths((prev) => ({
       ...prev,
-      months: { ...prev.months, [month]: { items: fn(prev.months[month]?.items ?? []) } },
+      months: { ...prev.months, [month]: { ...prev.months[month], items: fn(prev.months[month]?.items ?? []) } },
     }));
 
   const patchItem = (id: string, patch: Partial<MonthItem>) =>
@@ -38,7 +55,7 @@ export function MonthView({ month, setMonth }: { month: string; setMonth: (m: st
 
   const addItem = (category: ItemCategory) => {
     const id = uid();
-    setItems((list) => [...list, { id, label: '', amount: 0, category, recurring: true, inKind: false, goalId: null }]);
+    setItems((list) => [...list, { id, label: '', amount: 0, category, recurring: true, goalId: null }]);
     setFocusId(id);
   };
 
@@ -58,27 +75,66 @@ export function MonthView({ month, setMonth }: { month: string; setMonth: (m: st
       return { ...prev, months: rest };
     });
 
+  const contributions = monthContributions(items, goals.goals);
+
+  const confirmClose = (recordPoint: boolean) => {
+    const closedAt = new Date().toISOString();
+    updateGoals((prev) => ({ ...prev, goals: applyContributions(prev.goals, contributions, 1) }));
+    if (recordPoint) updatePatrimoine((prev) => withHistoryPoint(prev, month, availableWealth(prev)));
+    updateMonths((prev) => ({
+      ...prev,
+      months: { ...prev.months, [month]: { ...prev.months[month], closure: { closedAt, contributions } } },
+    }));
+    setClosingMonth(null);
+  };
+
+  const reopen = () => {
+    if (!closure) return;
+    updateGoals((prev) => ({ ...prev, goals: applyContributions(prev.goals, closure.contributions, -1) }));
+    updateMonths((prev) => {
+      const reopened = { ...prev.months[month] };
+      delete reopened.closure;
+      return { ...prev, months: { ...prev.months, [month]: reopened } };
+    });
+  };
+
   const history = useMemo(
     () =>
       sortedMonthKeys(months).map((key) => {
         const t = monthTotals(months.months[key].items);
-        return { key, label: formatMonthShort(key), value: t.cashflow, totals: t };
+        return { key, label: formatMonthShort(key), value: t.cashflow, totals: t, closed: Boolean(months.months[key].closure) };
       }),
     [months],
   );
 
   const activeGoals = goals.goals.filter((g) => g.kind === 'achat');
+  const period = month === nowKey ? 'Mois en cours' : month < nowKey ? 'Mois passé' : 'Mois à venir';
 
   return (
     <div>
       <PageHeader
         title={formatMonthLong(month)}
-        subtitle={month === nowKey ? 'Mois en cours' : month < nowKey ? 'Mois passé' : 'Mois à venir'}
+        subtitle={closure ? `${period} · clôturé le ${formatDay(closure.closedAt)}` : period}
         actions={
           <>
             {month !== nowKey && (
               <button type="button" className="btn-ghost" onClick={() => setMonth(nowKey)}>
                 Revenir au mois en cours
+              </button>
+            )}
+            {closure && (
+              <button
+                type="button"
+                className="btn-secondary"
+                title="Déverrouille le mois et retire des objectifs l’épargne versée à la clôture"
+                onClick={reopen}
+              >
+                <LockOpen size={15} /> Rouvrir le mois
+              </button>
+            )}
+            {canClose && !closing && (
+              <button type="button" className="btn-primary" onClick={() => setClosingMonth(month)}>
+                <CalendarCheck size={16} /> Clôturer le mois
               </button>
             )}
             <div className="flex items-center rounded-lg border border-line bg-surface">
@@ -93,6 +149,16 @@ export function MonthView({ month, setMonth }: { month: string; setMonth: (m: st
           </>
         }
       />
+
+      {closing && canClose && (
+        <ClosingPanel
+          month={month}
+          contributions={contributions}
+          onCancel={() => setClosingMonth(null)}
+          onConfirm={confirmClose}
+          onUpdateWealth={() => nav.go('patrimoine')}
+        />
+      )}
 
       {!data ? (
         <div className="card flex flex-col items-center gap-4 px-6 py-14 text-center">
@@ -123,6 +189,7 @@ export function MonthView({ month, setMonth }: { month: string; setMonth: (m: st
                     items={items.filter((it) => it.category === cat)}
                     goals={activeGoals}
                     focusId={focusId}
+                    readOnly={readOnly}
                     onAdd={() => addItem(cat)}
                     onPatch={patchItem}
                     onDelete={(id) => setItems((list) => list.filter((it) => it.id !== id))}
@@ -168,8 +235,13 @@ export function MonthView({ month, setMonth }: { month: string; setMonth: (m: st
                   className={`cursor-pointer border-b border-line last:border-0 hover:bg-sunken ${h.key === month ? 'bg-accent-soft' : ''}`}
                   onClick={() => setMonth(h.key)}
                 >
-                  <td className="py-2">{formatMonthLong(h.key)}</td>
-                  <td className="py-2 text-right">{formatEURRounded(h.totals.revenusCash)}</td>
+                  <td className="py-2">
+                    <span className="inline-flex items-center gap-1.5">
+                      {formatMonthLong(h.key)}
+                      {h.closed && <CalendarCheck size={13} className="text-[var(--good-ink)]" aria-label="clôturé" />}
+                    </span>
+                  </td>
+                  <td className="py-2 text-right">{formatEURRounded(h.totals.revenus)}</td>
                   <td className="py-2 text-right">{formatEURRounded(h.totals.depensesFixes + h.totals.depensesVariables)}</td>
                   <td className="py-2 text-right">{formatEURRounded(h.totals.epargne)}</td>
                   <td className={`py-2 text-right font-semibold ${h.value < 0 ? 'text-negative' : 'text-ink'}`}>{formatEURRounded(h.value)}</td>
@@ -180,7 +252,7 @@ export function MonthView({ month, setMonth }: { month: string; setMonth: (m: st
         )}
       </Card>
 
-      {data && (
+      {data && !readOnly && (
         <div className="mt-6 flex items-center justify-end gap-2 text-xs text-muted">
           Supprimer toutes les lignes de ce mois
           <ConfirmDelete label="Supprimer ce mois" onConfirm={deleteMonth} />
@@ -190,9 +262,94 @@ export function MonthView({ month, setMonth }: { month: string; setMonth: (m: st
   );
 }
 
+function ClosingPanel({
+  month,
+  contributions,
+  onCancel,
+  onConfirm,
+  onUpdateWealth,
+}: {
+  month: string;
+  contributions: { goalId: string; amount: number }[];
+  onCancel: () => void;
+  onConfirm: (recordPoint: boolean) => void;
+  onUpdateWealth: () => void;
+}) {
+  const { goals, patrimoine, nowKey } = useData();
+  const wealth = availableWealth(patrimoine);
+  const existing = patrimoine.history.find((h) => h.month === month);
+  const stale = patrimoine.financier.filter((l) => !l.updatedAt || toMonthKey(new Date(l.updatedAt)) < month);
+  const monthName = formatMonthLong(month).toLowerCase();
+  // Today's balances only describe the current or previous month; re-closing an older month keeps its point.
+  const [recordPoint, setRecordPoint] = useState(month >= addMonths(nowKey, -1));
+
+  return (
+    <section className="card mb-6 border-accent p-5 ring-1 ring-accent" aria-label={`Clôturer ${monthName}`}>
+      <h2 className="text-[15px] font-semibold text-ink">Clôturer {monthName}</h2>
+      <p className="mt-0.5 text-xs text-muted">Le mois sera verrouillé ; vous pourrez le rouvrir pour le corriger.</p>
+
+      <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div>
+          <h3 className="section-title mb-2">Épargne versée aux objectifs</h3>
+          {contributions.length === 0 ? (
+            <p className="text-sm text-muted">Aucune ligne d’épargne n’est liée à un objectif ce mois-ci.</p>
+          ) : (
+            <ul className="tabular space-y-1.5 text-sm">
+              {contributions.map((c) => {
+                const goal = goals.goals.find((g) => g.id === c.goalId);
+                if (!goal) return null;
+                return (
+                  <li key={c.goalId} className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="text-ink">{goal.name}</span>
+                    <span className="font-medium text-positive">+{formatEURRounded(c.amount)}</span>
+                    <span className="text-muted">
+                      ({formatEURRounded(goal.savedAmount)} → {formatEURRounded(goal.savedAmount + c.amount)})
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div>
+          <h3 className="section-title mb-2">Point de patrimoine</h3>
+          <label className="tabular flex items-start gap-2 text-sm text-ink">
+            <input type="checkbox" className="mt-1" checked={recordPoint} onChange={(e) => setRecordPoint(e.target.checked)} />
+            <span>
+              Enregistrer le patrimoine actuel ({formatEURRounded(wealth)}) comme point de {monthName}
+              {existing && <span className="text-muted"> — remplace {formatEURRounded(existing.total)}</span>}
+            </span>
+          </label>
+          {recordPoint && stale.length > 0 && (
+            <div className="mt-2 flex items-start gap-2 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs text-ink">
+              <TriangleAlert size={14} className="mt-0.5 shrink-0 text-[var(--warning-ink)]" />
+              <span>
+                Pas de mise à jour depuis le début du mois : {stale.map((l) => l.label || 'ligne sans nom').join(', ')}.{' '}
+                <button type="button" className="font-medium text-accent hover:underline" onClick={onUpdateWealth}>
+                  Mettre à jour les soldes
+                </button>
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-5 flex justify-end gap-2">
+        <button type="button" className="btn-secondary" onClick={onCancel}>
+          Annuler
+        </button>
+        <button type="button" className="btn-primary" onClick={() => onConfirm(recordPoint)}>
+          <CalendarCheck size={16} /> Confirmer la clôture
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function CashflowSummary({ totals }: { totals: ReturnType<typeof monthTotals> }) {
   const parts: { label: string; value: number; sign: '' | '−' }[] = [
-    { label: 'Revenus', value: totals.revenusCash, sign: '' },
+    { label: 'Revenus', value: totals.revenus, sign: '' },
     { label: 'Dépenses fixes', value: totals.depensesFixes, sign: '−' },
     { label: 'Dépenses variables', value: totals.depensesVariables, sign: '−' },
     { label: 'Épargne allouée', value: totals.epargne, sign: '−' },
@@ -219,11 +376,6 @@ function CashflowSummary({ totals }: { totals: ReturnType<typeof monthTotals> })
             </div>
           </div>
         ))}
-        {totals.revenusInKind > 0 && (
-          <p className="w-full text-xs text-muted">
-            Avantages en nature ({formatEURRounded(totals.revenusInKind)}) affichés mais exclus du cash-flow : ils ne sont pas encaissés.
-          </p>
-        )}
       </div>
     </div>
   );
@@ -234,6 +386,7 @@ function CategoryCard({
   items,
   goals,
   focusId,
+  readOnly,
   onAdd,
   onPatch,
   onDelete,
@@ -242,11 +395,12 @@ function CategoryCard({
   items: MonthItem[];
   goals: { id: string; name: string }[];
   focusId: string | null;
+  readOnly: boolean;
   onAdd: () => void;
   onPatch: (id: string, patch: Partial<MonthItem>) => void;
   onDelete: (id: string) => void;
 }) {
-  const total = items.reduce((s, it) => s + (category === 'revenu' && it.inKind ? 0 : it.amount), 0);
+  const total = items.reduce((s, it) => s + it.amount, 0);
   return (
     <Card
       title={CATEGORY_LABELS[category]}
@@ -256,12 +410,22 @@ function CategoryCard({
       {items.length === 0 && <p className="px-2 py-3 text-sm text-muted">Aucune ligne.</p>}
       <ul>
         {items.map((it) => (
-          <ItemRow key={it.id} item={it} goals={goals} autoFocus={it.id === focusId} onPatch={onPatch} onDelete={onDelete} />
+          <ItemRow
+            key={it.id}
+            item={it}
+            goals={goals}
+            autoFocus={it.id === focusId}
+            readOnly={readOnly}
+            onPatch={onPatch}
+            onDelete={onDelete}
+          />
         ))}
       </ul>
-      <button type="button" className="btn-ghost mt-1 text-accent hover:text-accent" onClick={onAdd}>
-        <Plus size={16} /> Ajouter
-      </button>
+      {!readOnly && (
+        <button type="button" className="btn-ghost mt-1 text-accent hover:text-accent" onClick={onAdd}>
+          <Plus size={16} /> Ajouter
+        </button>
+      )}
     </Card>
   );
 }
@@ -270,12 +434,14 @@ function ItemRow({
   item,
   goals,
   autoFocus,
+  readOnly,
   onPatch,
   onDelete,
 }: {
   item: MonthItem;
   goals: { id: string; name: string }[];
   autoFocus: boolean;
+  readOnly: boolean;
   onPatch: (id: string, patch: Partial<MonthItem>) => void;
   onDelete: (id: string) => void;
 }) {
@@ -293,48 +459,53 @@ function ItemRow({
             placeholder={`Nouvelle ligne (${CATEGORY_SINGULAR[item.category].toLowerCase()})`}
             aria-label="Libellé"
             autoFocus={autoFocus}
+            disabled={readOnly}
             onChange={(e) => onPatch(item.id, { label: e.target.value })}
           />
-          {(linkedGoal || (item.category === 'revenu' && item.inKind)) && (
+          {linkedGoal && (
             <div className="flex flex-wrap gap-1.5 px-2 pb-1">
-              {linkedGoal && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
-                  <Link2 size={11} /> {linkedGoal.name}
-                </span>
-              )}
-              {item.category === 'revenu' && item.inKind && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-2">
-                  <Gift size={11} /> En nature · hors cash-flow
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
+                <Link2 size={11} /> {linkedGoal.name}
+              </span>
             </div>
           )}
         </div>
-        <AmountInput className="w-28 shrink-0" value={item.amount} ariaLabel={`Montant ${item.label}`} onChange={(v) => onPatch(item.id, { amount: v ?? 0 })} />
+        <AmountInput
+          className="w-28 shrink-0"
+          value={item.amount}
+          ariaLabel={`Montant ${item.label}`}
+          disabled={readOnly}
+          onChange={(v) => onPatch(item.id, { amount: v ?? 0 })}
+        />
         <button
           type="button"
-          className={`icon-btn ${item.recurring ? 'text-accent' : 'opacity-60'}`}
+          className={`icon-btn ${item.recurring ? 'text-accent' : 'opacity-60'} disabled:cursor-default disabled:hover:bg-transparent`}
           title={item.recurring ? 'Récurrent : repris le mois suivant' : 'Ponctuel : non repris le mois suivant'}
           aria-label="Récurrent"
           aria-pressed={item.recurring}
+          disabled={readOnly}
           onClick={() => onPatch(item.id, { recurring: !item.recurring })}
         >
           <Repeat size={15} />
         </button>
-        <button
-          type="button"
-          className={`icon-btn ${open ? 'bg-sunken text-ink' : ''}`}
-          title="Options"
-          aria-label="Options"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-        >
-          <SlidersHorizontal size={15} />
-        </button>
-        <ConfirmDelete onConfirm={() => onDelete(item.id)} />
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              className={`icon-btn ${open ? 'bg-sunken text-ink' : ''}`}
+              title="Options"
+              aria-label="Options"
+              aria-expanded={open}
+              onClick={() => setOpen((o) => !o)}
+            >
+              <SlidersHorizontal size={15} />
+            </button>
+            <ConfirmDelete onConfirm={() => onDelete(item.id)} />
+          </>
+        )}
       </div>
 
-      {open && (
+      {open && !readOnly && (
         <div className="mb-2 ml-2 mr-1 grid grid-cols-2 gap-3 rounded-lg bg-sunken p-3">
           <label>
             <span className="label">Catégorie</span>
@@ -356,7 +527,7 @@ function ItemRow({
           </label>
           {item.category === 'epargne' && (
             <label className="col-span-2">
-              <span className="label">Objectif alimenté par cette épargne</span>
+              <span className="label">Objectif alimenté par cette épargne (versée à l’objectif à la clôture du mois)</span>
               <select
                 className="field py-1.5"
                 value={item.goalId ?? ''}
@@ -369,12 +540,6 @@ function ItemRow({
                   </option>
                 ))}
               </select>
-            </label>
-          )}
-          {item.category === 'revenu' && (
-            <label className="col-span-2 flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={Boolean(item.inKind)} onChange={(e) => onPatch(item.id, { inKind: e.target.checked })} />
-              Avantage en nature (non encaissé, exclu du cash-flow)
             </label>
           )}
         </div>

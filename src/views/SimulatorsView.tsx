@@ -1,17 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useData } from '../state/DataContext';
-import { goalProgress, monthsToReach, simulateCompound, sumLines, type CompoundRow } from '../lib/calc';
+import { contributionStart, goalProgress, monthsToReach, simulateCompound, sumLines, type CompoundRow } from '../lib/calc';
 import { formatCompactEUR, formatEURRounded } from '../lib/format';
 import { addMonths, diffMonths, formatMonthLong } from '../lib/months';
 import { AmountInput } from '../components/AmountInput';
 import { Card, PageHeader } from '../components/Layout';
+import { ProjectionCard } from './ProjectionCard';
 
 export function SimulatorsView({ initialGoalId }: { initialGoalId: string | null }) {
   return (
     <div>
       <PageHeader title="Simulateurs" subtitle="Projections indicatives : elles ne remplacent pas un conseil financier." />
-      <CompoundSimulator />
+      <ProjectionCard />
+      <div className="mt-6">
+        <CompoundSimulator />
+      </div>
       <GoalSimulator initialGoalId={initialGoalId} />
     </div>
   );
@@ -30,7 +34,7 @@ function CompoundSimulator() {
     const unlinkedSavings = (months.months[nowKey]?.items ?? [])
       .filter((it) => it.category === 'epargne' && !it.goalId)
       .reduce((s, it) => s + it.amount, 0);
-    return { initial: invested, monthly: unlinkedSavings > 0 ? unlinkedSavings : 500 };
+    return { initial: Math.round(invested), monthly: unlinkedSavings > 0 ? unlinkedSavings : 500 };
   });
 
   const [initial, setInitial] = useState<number>(defaults.initial);
@@ -222,12 +226,13 @@ function Result({ label, value, strong = false }: { label: string; value: string
 function GoalSimulator({ initialGoalId }: { initialGoalId: string | null }) {
   const { goals, months, nowKey } = useData();
   const currentItems = months.months[nowKey]?.items ?? [];
+  const fromKey = contributionStart(months, nowKey);
   const candidates = goals.goals.filter((g) => g.kind === 'achat' && g.priority !== 'abandonne');
 
   const fromGoal = (id: string) => {
     const g = candidates.find((x) => x.id === id);
     if (!g) return null;
-    const left = g.targetDate ? diffMonths(nowKey, g.targetDate) : 12;
+    const left = g.targetDate ? diffMonths(fromKey, g.targetDate) : 12;
     return { target: g.targetAmount ?? 0, saved: g.savedAmount, months: Math.max(1, left) };
   };
 
@@ -252,13 +257,13 @@ function GoalSimulator({ initialGoalId }: { initialGoalId: string | null }) {
   const safeDuration = Math.max(1, Math.round(duration));
   const required = remaining / safeDuration;
   const selected = candidates.find((g) => g.id === goalId);
-  const current = selected ? goalProgress(selected, nowKey, currentItems).currentMonthly : 0;
+  const current = selected ? goalProgress(selected, fromKey, currentItems).currentMonthly : 0;
 
   const reachLine = (monthly: number) => {
     const n = monthsToReach(remaining, monthly);
     if (n === null) return 'jamais atteint à ce rythme.';
     if (n === 0) return 'déjà atteint.';
-    return `atteint en ${n} mois, soit ${formatMonthLong(addMonths(nowKey, n)).toLowerCase()}.`;
+    return `atteint en ${n} mois, soit ${formatMonthLong(addMonths(fromKey, n)).toLowerCase()}.`;
   };
 
   return (
@@ -301,7 +306,7 @@ function GoalSimulator({ initialGoalId }: { initialGoalId: string | null }) {
             <span className="text-lg font-medium text-ink-2"> /mois</span>
           </div>
           <div className="mt-2 text-sm text-ink-2">
-            pendant {safeDuration} mois pour réunir {formatEURRounded(remaining)}, soit jusqu’à {formatMonthLong(addMonths(nowKey, safeDuration)).toLowerCase()}.
+            pendant {safeDuration} mois pour réunir {formatEURRounded(remaining)}, soit jusqu’à {formatMonthLong(addMonths(fromKey, safeDuration)).toLowerCase()}.
           </div>
           <div className="mt-4 space-y-1.5 border-t border-line pt-3 text-sm text-ink-2">
             {selected && (

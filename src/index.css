@@ -105,7 +105,8 @@ body {
   /* Inputs that read as plain text until hovered/focused, for fast in-place edits. */
   .inline-input {
     @apply w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-ink outline-none transition-colors
-      placeholder:text-muted hover:border-line focus:border-accent focus:bg-surface;
+      placeholder:text-muted hover:border-line focus:border-accent focus:bg-surface
+      disabled:cursor-default disabled:hover:border-transparent;
   }
 
   .field {

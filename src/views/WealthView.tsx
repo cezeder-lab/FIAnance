@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { Camera, Plus } from 'lucide-react';
+import { Camera, LoaderCircle, Plus, RefreshCw, SlidersHorizontal, TriangleAlert, X } from 'lucide-react';
 import type { AssetKind, AssetLine, PatrimoineFile } from '../types';
 import { useData } from '../state/DataContext';
-import { availableWealth, sumLines } from '../lib/calc';
-import { formatEURRounded, formatSignedEUR } from '../lib/format';
+import { availableWealth, sumLines, valued, withHistoryPoint } from '../lib/calc';
+import { bridge } from '../lib/bridge';
+import { formatEUR, formatEURRounded, formatSignedEUR } from '../lib/format';
 import { formatDay, formatMonthLong, formatMonthShort, isMonthKey } from '../lib/months';
 import { uid } from '../lib/seed';
 import { ASSET_KIND_LABELS } from '../lib/labels';
@@ -13,6 +14,18 @@ import { Card, PageHeader } from '../components/Layout';
 import { TrendChart } from '../components/TrendChart';
 
 type Section = 'financier' | 'immobilier' | 'heritage';
+
+const timeFmt = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const dateTimeFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+/** Applies an edit; touching a value (amount, quantity, price) counts as an update of the line. */
+function patched(line: AssetLine, p: Partial<AssetLine>): AssetLine {
+  const next = valued({ ...line, ...p });
+  const touchesValue = 'amount' in p || 'quantity' in p || 'unitPrice' in p;
+  return touchesValue ? { ...next, updatedAt: new Date().toISOString() } : next;
+}
+
+const normalizeSymbol = (s: string) => s.trim().toUpperCase();
 
 export function WealthView() {
   const { patrimoine, nowKey, updatePatrimoine } = useData();
@@ -36,12 +49,6 @@ export function WealthView() {
     setFocusId(id);
   };
 
-  const snapshot = () =>
-    updatePatrimoine((prev) => ({
-      ...prev,
-      history: [...prev.history.filter((p) => p.month !== nowKey), { month: nowKey, total: availableWealth(prev) }],
-    }));
-
   return (
     <div>
       <PageHeader title="Patrimoine" subtitle="Montants mis à jour à la main, sans aucune synchronisation bancaire." />
@@ -60,7 +67,7 @@ export function WealthView() {
           <p className="mt-1 text-xs text-muted">Liquide + investi. Hors immobilier/familial et hors héritage non reçu.</p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <button type="button" className="btn-primary" onClick={snapshot}>
+          <button type="button" className="btn-primary" onClick={() => updatePatrimoine((prev) => withHistoryPoint(prev, nowKey, availableWealth(prev)))}>
             <Camera size={16} /> {currentPoint ? 'Mettre à jour' : 'Enregistrer'} le point de {formatMonthLong(nowKey).toLowerCase()}
           </button>
           {lastPoint && (
@@ -76,7 +83,7 @@ export function WealthView() {
         title="Financier — liquide & investi"
         subtitle="Compte dans le total disponible."
         lines={patrimoine.financier}
-        withKind
+        financial
         focusId={focusId}
         onChange={(fn) => setLines('financier', fn)}
         onAdd={() => addLine('financier')}
@@ -119,7 +126,7 @@ function AssetCard({
   title,
   subtitle,
   lines,
-  withKind = false,
+  financial = false,
   focusId,
   onChange,
   onAdd,
@@ -130,7 +137,8 @@ function AssetCard({
   title: ReactNode;
   subtitle: string;
   lines: AssetLine[];
-  withKind?: boolean;
+  /** Enables the asset type, quantity × price valuation and online quotes. */
+  financial?: boolean;
   focusId: string | null;
   onChange: (fn: (lines: AssetLine[]) => AssetLine[]) => void;
   onAdd: () => void;
@@ -138,59 +146,242 @@ function AssetCard({
   muted?: boolean;
   className?: string;
 }) {
-  const patch = (id: string, p: Partial<AssetLine>) => onChange((ls) => ls.map((l) => (l.id === id ? { ...l, ...p } : l)));
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+  const [quoteErrors, setQuoteErrors] = useState<string[]>([]);
+
+  const patch = (id: string, p: Partial<AssetLine>) => onChange((ls) => ls.map((l) => (l.id === id ? patched(l, p) : l)));
+  const quotedSymbols = Array.from(
+    new Set(lines.filter((l) => l.valuation === 'quantite' && l.quoteSymbol?.trim()).map((l) => normalizeSymbol(l.quoteSymbol!))),
+  );
+
+  const refreshQuotes = async () => {
+    setRefreshing(true);
+    try {
+      const results = await Promise.all(quotedSymbols.map(async (s) => [s, await bridge.fetchQuote(s)] as const));
+      const errors: string[] = [];
+      const prices = new Map<string, { price: number; time: string | null }>();
+      for (const [symbol, res] of results) {
+        if (!res.ok) errors.push(res.error);
+        else if (res.quote.currency !== 'EUR')
+          errors.push(`${symbol} est coté en ${res.quote.currency ?? 'devise inconnue'} : choisissez une cotation en euros (ex. VUAA.DE sur Xetra).`);
+        else prices.set(symbol, { price: res.quote.price, time: res.quote.time });
+      }
+      onChange((ls) =>
+        ls.map((l) => {
+          const q = l.valuation === 'quantite' && l.quoteSymbol ? prices.get(normalizeSymbol(l.quoteSymbol)) : undefined;
+          return q ? patched(l, { unitPrice: q.price, quoteAt: q.time ?? new Date().toISOString() }) : l;
+        }),
+      );
+      setQuoteErrors(errors);
+      setRefreshedAt(new Date());
+    } catch (err) {
+      setQuoteErrors([`La récupération des cours a échoué : ${String(err)}`]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <Card
       className={className}
       title={title}
       subtitle={subtitle}
-      actions={<span className={`tabular text-[15px] font-semibold ${muted ? 'text-ink-2' : 'text-ink'}`}>{formatEURRounded(sumLines(lines))}</span>}
+      actions={
+        <>
+          {financial && quotedSymbols.length > 0 && (
+            <div className="flex items-center gap-2">
+              {refreshedAt && !refreshing && <span className="text-xs text-muted">à {timeFmt.format(refreshedAt)}</span>}
+              <button
+                type="button"
+                className="btn-secondary py-1"
+                disabled={refreshing}
+                title={`Récupère sur Yahoo Finance le cours de : ${quotedSymbols.join(', ')}`}
+                onClick={() => void refreshQuotes()}
+              >
+                {refreshing ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />} Actualiser les cours
+              </button>
+            </div>
+          )}
+          <span className={`tabular text-[15px] font-semibold ${muted ? 'text-ink-2' : 'text-ink'}`}>{formatEURRounded(sumLines(lines))}</span>
+        </>
+      }
       bodyClassName="px-3 py-2"
     >
+      {quoteErrors.length > 0 && (
+        <div className="mx-1 mb-2 mt-1 flex items-start gap-2 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs text-ink" role="alert">
+          <TriangleAlert size={14} className="mt-0.5 shrink-0 text-[var(--warning-ink)]" />
+          <div className="flex-1 space-y-0.5">
+            {quoteErrors.map((e) => (
+              <p key={e}>{e}</p>
+            ))}
+            <p className="text-muted">Vous pouvez toujours saisir le cours à la main.</p>
+          </div>
+          <button type="button" className="icon-btn -my-1 h-6 w-6" aria-label="Fermer" onClick={() => setQuoteErrors([])}>
+            <X size={13} />
+          </button>
+        </div>
+      )}
       {lines.length === 0 && empty && <p className="px-2 py-3 text-sm text-muted">{empty}</p>}
       <ul>
         {lines.map((l) => (
-          <li key={l.id} className="flex items-center gap-2 border-b border-line py-1 last:border-0">
-            <input
-              className="inline-input min-w-0 flex-1"
-              value={l.label}
-              title={l.label}
-              placeholder="Nouvelle ligne"
-              aria-label="Libellé"
-              autoFocus={l.id === focusId}
-              onChange={(e) => patch(l.id, { label: e.target.value })}
-            />
-            {withKind && (
-              <select
-                className="inline-input w-24 shrink-0 text-xs text-ink-2"
-                value={l.kind ?? 'liquide'}
-                aria-label="Type"
-                onChange={(e) => patch(l.id, { kind: e.target.value as AssetKind })}
-              >
-                {(Object.keys(ASSET_KIND_LABELS) as AssetKind[]).map((k) => (
-                  <option key={k} value={k}>
-                    {ASSET_KIND_LABELS[k]}
-                  </option>
-                ))}
-              </select>
-            )}
-            <span className="hidden w-28 shrink-0 text-right text-xs text-muted md:block">
-              {l.updatedAt ? `maj ${formatDay(l.updatedAt)}` : ''}
-            </span>
-            <AmountInput
-              className="w-36 shrink-0"
-              value={l.amount}
-              ariaLabel={`Montant ${l.label}`}
-              onChange={(v) => patch(l.id, { amount: v ?? 0, updatedAt: new Date().toISOString() })}
-            />
-            <ConfirmDelete onConfirm={() => onChange((ls) => ls.filter((x) => x.id !== l.id))} />
-          </li>
+          <AssetRow
+            key={l.id}
+            line={l}
+            financial={financial}
+            autoFocus={l.id === focusId}
+            onPatch={(p) => patch(l.id, p)}
+            onDelete={() => onChange((ls) => ls.filter((x) => x.id !== l.id))}
+          />
         ))}
       </ul>
       <button type="button" className="btn-ghost mt-1 text-accent hover:text-accent" onClick={onAdd}>
         <Plus size={16} /> Ajouter
       </button>
     </Card>
+  );
+}
+
+function AssetRow({
+  line,
+  financial,
+  autoFocus,
+  onPatch,
+  onDelete,
+}: {
+  line: AssetLine;
+  financial: boolean;
+  autoFocus: boolean;
+  onPatch: (p: Partial<AssetLine>) => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const byUnits = financial && line.valuation === 'quantite';
+  const info =
+    byUnits && line.quoteAt
+      ? { text: `cours ${line.quoteSymbol ?? ''} du ${formatDay(line.quoteAt)}`, title: dateTimeFmt.format(new Date(line.quoteAt)) }
+      : line.updatedAt
+        ? { text: `maj ${formatDay(line.updatedAt)}`, title: dateTimeFmt.format(new Date(line.updatedAt)) }
+        : null;
+
+  return (
+    <li className="border-b border-line last:border-0">
+      <div className="flex items-center gap-2 py-1">
+        <div className="min-w-0 flex-1">
+          <input
+            className="inline-input"
+            value={line.label}
+            title={line.label}
+            placeholder="Nouvelle ligne"
+            aria-label="Libellé"
+            autoFocus={autoFocus}
+            onChange={(e) => onPatch({ label: e.target.value })}
+          />
+          {info && (
+            <div className="px-2 text-[11px] text-muted" title={info.title}>
+              {info.text}
+            </div>
+          )}
+        </div>
+        {financial && (
+          <select
+            className="inline-input w-24 shrink-0 text-xs text-ink-2"
+            value={line.kind ?? 'liquide'}
+            aria-label="Type"
+            onChange={(e) => onPatch({ kind: e.target.value as AssetKind })}
+          >
+            {(Object.keys(ASSET_KIND_LABELS) as AssetKind[]).map((k) => (
+              <option key={k} value={k}>
+                {ASSET_KIND_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        )}
+        {financial && (
+          <div className="flex w-60 shrink-0 items-center gap-1">
+            {byUnits && (
+              <>
+                <AmountInput
+                  className="w-24"
+                  suffix=""
+                  maxDecimals={8}
+                  allowEmpty
+                  placeholder="Qté"
+                  value={line.quantity ?? null}
+                  ariaLabel={`Quantité ${line.label}`}
+                  onChange={(v) => onPatch({ quantity: v })}
+                />
+                <span className="text-xs text-muted">×</span>
+                <AmountInput
+                  className="w-32"
+                  maxDecimals={4}
+                  allowEmpty
+                  placeholder="Cours"
+                  value={line.unitPrice ?? null}
+                  ariaLabel={`Cours ${line.label}`}
+                  onChange={(v) => onPatch({ unitPrice: v, quoteAt: null })}
+                />
+              </>
+            )}
+          </div>
+        )}
+        {byUnits ? (
+          <span
+            className="tabular w-32 shrink-0 px-2 text-right font-medium text-ink"
+            title={line.quantity == null || line.unitPrice == null ? 'Renseignez la quantité et le cours' : undefined}
+            aria-label={`Montant ${line.label}`}
+          >
+            {formatEUR(line.amount)}
+          </span>
+        ) : (
+          <AmountInput className="w-32 shrink-0" value={line.amount} ariaLabel={`Montant ${line.label}`} onChange={(v) => onPatch({ amount: v ?? 0 })} />
+        )}
+        {financial && (
+          <button
+            type="button"
+            className={`icon-btn ${open ? 'bg-sunken text-ink' : ''}`}
+            title="Options"
+            aria-label="Options"
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+          >
+            <SlidersHorizontal size={15} />
+          </button>
+        )}
+        <ConfirmDelete onConfirm={onDelete} />
+      </div>
+
+      {open && financial && (
+        <div className="mb-2 ml-2 mr-1 grid grid-cols-1 gap-3 rounded-lg bg-sunken p-3 md:grid-cols-2">
+          <label>
+            <span className="label">Valorisation</span>
+            <select
+              className="field py-1.5"
+              value={line.valuation ?? 'montant'}
+              onChange={(e) => onPatch({ valuation: e.target.value as 'montant' | 'quantite' })}
+            >
+              <option value="montant">Montant saisi</option>
+              <option value="quantite">Quantité × cours</option>
+            </select>
+          </label>
+          {byUnits && (
+            <label>
+              <span className="label">Symbole Yahoo Finance pour le cours en ligne (facultatif)</span>
+              <input
+                className="field py-1.5"
+                placeholder="ex. VUAA.DE"
+                value={line.quoteSymbol ?? ''}
+                onChange={(e) => onPatch({ quoteSymbol: e.target.value })}
+              />
+              <span className="mt-1 block text-[11px] text-muted">
+                Cotation en euros (VUAA.DE = Xetra ; BTC-EUR pour le bitcoin). Seul ce symbole est envoyé, uniquement quand vous cliquez sur
+                « Actualiser les cours ».
+              </span>
+            </label>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -209,7 +400,7 @@ function HistoryCard({
 
   const add = () => {
     if (!canAdd) return;
-    onChange((p) => ({ ...p, history: [...p.history.filter((h) => h.month !== month), { month, total: amount }] }));
+    onChange((p) => withHistoryPoint(p, month, amount));
     setMonth('');
     setAmount(null);
   };
@@ -218,7 +409,7 @@ function HistoryCard({
     <Card
       className="mt-6"
       title="Évolution du patrimoine financier disponible"
-      subtitle="Un point par mois, enregistré avec le bouton ci-dessus ou saisi à la main."
+      subtitle="Un point par mois : enregistré à la clôture du mois, avec le bouton ci-dessus, ou saisi à la main."
     >
       <TrendChart
         data={history.map((h) => ({ key: h.month, label: formatMonthShort(h.month), value: h.total }))}

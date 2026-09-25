@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, CalendarCheck } from 'lucide-react';
 import type { Nav } from '../App';
 import { useData } from '../state/DataContext';
-import { availableWealth, goalProgress, monthTotals, sumLines } from '../lib/calc';
+import { availableWealth, contributionStart, goalProgress, monthTotals, sumLines } from '../lib/calc';
 import { formatEURRounded, formatPercent, formatSignedEUR } from '../lib/format';
-import { formatMonthLong, formatMonthShort, monthsLeftLabel } from '../lib/months';
+import { addMonths, formatMonthLong, formatMonthShort, monthsLeftLabel } from '../lib/months';
 import { Card, PageHeader, StatTile } from '../components/Layout';
 import { ProgressBar } from '../components/ProgressBar';
 import { StatusBadge, statusTone } from '../components/StatusBadge';
@@ -27,10 +27,14 @@ export function Dashboard({ nav }: { nav: Nav }) {
   const history = [...patrimoine.history].sort((a, b) => a.month.localeCompare(b.month));
   const previous = [...history].reverse().find((p) => p.month < nowKey);
 
+  const prevKey = addMonths(nowKey, -1);
+  const prevToClose = months.months[prevKey] && !months.months[prevKey].closure;
+
+  const fromKey = contributionStart(months, nowKey);
   const rank = { haute: 0, basse: 1, abandonne: 2 } as const;
   const active = goals.goals
     .filter((g) => g.kind === 'achat' && g.priority !== 'abandonne')
-    .map((g) => ({ goal: g, progress: goalProgress(g, nowKey, items) }))
+    .map((g) => ({ goal: g, progress: goalProgress(g, fromKey, items) }))
     .sort(
       (a, b) =>
         rank[a.goal.priority] - rank[b.goal.priority] || (a.goal.targetDate ?? '9999').localeCompare(b.goal.targetDate ?? '9999'),
@@ -43,6 +47,18 @@ export function Dashboard({ nav }: { nav: Nav }) {
     <div>
       <PageHeader title="Vue d’ensemble" subtitle={formatMonthLong(nowKey)} />
 
+      {prevToClose && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-accent-soft px-4 py-3 text-sm text-ink">
+          <CalendarCheck size={18} className="shrink-0 text-accent" />
+          <span className="flex-1">
+            {formatMonthLong(prevKey)} n’est pas clôturé : enregistrez le point de patrimoine et versez l’épargne du mois aux objectifs.
+          </span>
+          <button type="button" className="btn-primary" onClick={() => nav.go('mois', { month: prevKey, close: true })}>
+            Clôturer {formatMonthLong(prevKey).toLowerCase()}
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <StatTile
           hero
@@ -51,7 +67,7 @@ export function Dashboard({ nav }: { nav: Nav }) {
           valueClassName={t.cashflow < 0 ? 'text-negative' : 'text-positive'}
         >
           <div className="tabular">
-            {formatEURRounded(t.revenusCash)} de revenus − {formatEURRounded(t.depensesFixes + t.depensesVariables)} de dépenses −{' '}
+            {formatEURRounded(t.revenus)} de revenus − {formatEURRounded(t.depensesFixes + t.depensesVariables)} de dépenses −{' '}
             {formatEURRounded(t.epargne)} d’épargne
           </div>
           <div className="mt-2">
@@ -79,7 +95,7 @@ export function Dashboard({ nav }: { nav: Nav }) {
 
         <StatTile hero label="Taux d’épargne du mois" value={t.savingsRate !== null ? formatPercent(t.savingsRate) : '—'}>
           <div className="tabular">
-            {formatEURRounded(t.epargne)} mis de côté sur {formatEURRounded(t.revenusCash)} de revenus encaissés
+            {formatEURRounded(t.epargne)} mis de côté sur {formatEURRounded(t.revenus)} de revenus
           </div>
         </StatTile>
       </div>
@@ -168,7 +184,7 @@ export function Dashboard({ nav }: { nav: Nav }) {
           data={history.map((h) => ({ key: h.month, label: formatMonthShort(h.month), value: h.total }))}
           seriesName="Patrimoine disponible"
           height={200}
-          emptyText="Enregistrez un point chaque mois depuis l’onglet Patrimoine pour suivre l’évolution."
+          emptyText="Clôturez chaque mois (ou enregistrez un point depuis l’onglet Patrimoine) pour suivre l’évolution."
         />
       </Card>
     </div>

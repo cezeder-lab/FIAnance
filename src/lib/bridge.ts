@@ -43,6 +43,9 @@ const browserBridge: FiananceBridge = {
   async openDataFolder() {
     return '';
   },
+  async fetchQuote() {
+    return { ok: false, error: 'Le cours en ligne n’est disponible que dans l’application de bureau.' };
+  },
 };
 
 export const bridge: FiananceBridge = window.fianance ?? browserBridge;

@@ -15,7 +15,6 @@ export function seedMonths(monthKey: string): MonthsFile {
     amount: it.amount,
     category: it.category as MonthItem['category'],
     recurring: it.recurring,
-    inKind: 'inKind' in it ? Boolean(it.inKind) : false,
     goalId: 'goalId' in it ? (it.goalId as string) : null,
   }));
   return { version: 1, months: { [monthKey]: { items } } };
@@ -25,9 +24,26 @@ export function seedGoals(): GoalsFile {
   return { version: 1, goals: seed.goals.map((g) => ({ ...g }) as Goal) };
 }
 
+interface SeedLine {
+  label: string;
+  amount: number;
+  kind?: string;
+  valuation?: string;
+  quoteSymbol?: string;
+}
+
 export function seedPatrimoine(): PatrimoineFile {
-  const lines = (arr: { label: string; amount: number; kind?: string }[]): AssetLine[] =>
-    arr.map((l) => ({ id: uid(), label: l.label, amount: l.amount, kind: l.kind as AssetLine['kind'], updatedAt: null }));
+  const lines = (arr: SeedLine[]): AssetLine[] =>
+    arr.map((l) => ({
+      id: uid(),
+      label: l.label,
+      amount: l.amount,
+      kind: l.kind as AssetLine['kind'],
+      updatedAt: null,
+      ...(l.valuation === 'quantite'
+        ? { valuation: 'quantite' as const, quantity: null, unitPrice: null, quoteSymbol: l.quoteSymbol ?? '', quoteAt: null }
+        : {}),
+    }));
   return {
     version: 1,
     financier: lines(seed.patrimoine.financier),

@@ -3,7 +3,7 @@ import { ArrowDownLeft, Calculator, ChevronDown, ChevronRight, Landmark, Pencil,
 import type { Nav } from '../App';
 import type { Goal, GoalKind, GoalPriority } from '../types';
 import { useData } from '../state/DataContext';
-import { goalProgress, type GoalProgress } from '../lib/calc';
+import { contributionStart, goalProgress, type GoalProgress } from '../lib/calc';
 import { formatEURRounded, formatPercent } from '../lib/format';
 import { formatMonthLong, isMonthKey, monthsLeftLabel } from '../lib/months';
 import { uid } from '../lib/seed';
@@ -42,7 +42,8 @@ export function GoalsView({ nav }: { nav: Nav }) {
     setEditingId(id);
   };
 
-  const withProgress = goals.goals.map((g) => ({ goal: g, progress: goalProgress(g, nowKey, currentItems) }));
+  const fromKey = contributionStart(months, nowKey);
+  const withProgress = goals.goals.map((g) => ({ goal: g, progress: goalProgress(g, fromKey, currentItems) }));
   const purchases = withProgress.filter((x) => x.goal.kind === 'achat');
   const high = purchases.filter((x) => x.goal.priority === 'haute');
   const low = purchases.filter((x) => x.goal.priority === 'basse');
@@ -243,7 +244,10 @@ function GoalCard({
               {progress.requiredMonthly !== null ? (
                 <>
                   {progress.overdue ? 'Échéance passée' : `${formatEURRounded(progress.requiredMonthly)}/mois`}
-                  <div className="text-xs text-muted">actuel : {formatEURRounded(progress.currentMonthly)}/mois</div>
+                  <div className="text-xs text-muted">
+                    {!progress.overdue && progress.monthsLeft !== null && `sur ${Math.max(1, progress.monthsLeft)} mois · `}
+                    actuel : {formatEURRounded(progress.currentMonthly)}/mois
+                  </div>
                 </>
               ) : (
                 <>
@@ -321,7 +325,7 @@ function GoalForm({ goal, onPatch, onDone }: { goal: Goal; onPatch: (p: Partial<
             <AmountInput variant="field" allowEmpty placeholder="À définir" value={goal.targetAmount} onChange={(v) => onPatch({ targetAmount: v })} />
           </label>
           <label>
-            <span className="label">Déjà mis de côté</span>
+            <span className="label">Déjà mis de côté (augmente à chaque clôture de mois)</span>
             <AmountInput variant="field" value={goal.savedAmount} onChange={(v) => onPatch({ savedAmount: v ?? 0 })} />
           </label>
           <label>

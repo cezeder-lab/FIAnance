@@ -24,7 +24,8 @@ import { SimulatorsView } from './views/SimulatorsView';
 export type ViewId = 'dashboard' | 'mois' | 'objectifs' | 'patrimoine' | 'simulateurs';
 
 export interface Nav {
-  go: (view: ViewId, opts?: { month?: string; goalId?: string }) => void;
+  /** `close` opens the month-closing panel of `month` right away. */
+  go: (view: ViewId, opts?: { month?: string; goalId?: string; close?: boolean }) => void;
 }
 
 const NAV: { id: ViewId; label: string; Icon: LucideIcon }[] = [
@@ -40,6 +41,7 @@ export function App() {
   const [view, setView] = useState<ViewId>('dashboard');
   const [month, setMonth] = useState(nowKey);
   const [simGoalId, setSimGoalId] = useState<string | null>(null);
+  const [closeRequested, setCloseRequested] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,6 +54,7 @@ export function App() {
     go: (v, opts) => {
       if (opts?.month) setMonth(opts.month);
       if (opts?.goalId !== undefined) setSimGoalId(opts.goalId);
+      setCloseRequested(Boolean(opts?.close));
       setView(v);
       document.getElementById('main')?.scrollTo({ top: 0 });
     },
@@ -147,7 +150,7 @@ export function App() {
           )}
 
           {view === 'dashboard' && <Dashboard nav={nav} />}
-          {view === 'mois' && <MonthView month={month} setMonth={setMonth} />}
+          {view === 'mois' && <MonthView month={month} setMonth={setMonth} nav={nav} openClosing={closeRequested} />}
           {view === 'objectifs' && <GoalsView nav={nav} />}
           {view === 'patrimoine' && <WealthView />}
           {view === 'simulateurs' && <SimulatorsView initialGoalId={simGoalId} />}

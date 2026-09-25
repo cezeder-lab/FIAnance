@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } = require('electron');
 const path = require('node:path');
 const { createStorage } = require('./storage');
+const { fetchQuote } = require('./quotes');
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
@@ -71,6 +72,8 @@ function registerIpc() {
   });
 
   ipcMain.handle('data:open-folder', () => shell.openPath(storage.dataDir));
+
+  ipcMain.handle('quote:fetch', (_event, symbol) => fetchQuote(symbol));
 }
 
 app.whenReady().then(() => {

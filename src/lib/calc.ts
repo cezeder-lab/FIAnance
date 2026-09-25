@@ -1,50 +1,34 @@
-import type { AssetLine, Goal, MonthItem, MonthsFile, PatrimoineFile } from '../types';
-import { diffMonths } from './months';
+import type { AssetLine, Goal, GoalContribution, MonthItem, MonthsFile, PatrimoineFile } from '../types';
+import { addMonths, diffMonths } from './months';
+
+export const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const finite = (n: number) => (Number.isFinite(n) ? n : 0);
 
 export interface MonthTotals {
-  revenusCash: number;
-  revenusInKind: number;
+  revenus: number;
   depensesFixes: number;
   depensesVariables: number;
   epargne: number;
-  /** revenus (cash) − dépenses − épargne allouée */
+  /** revenus − dépenses − épargne allouée */
   cashflow: number;
-  /** épargne / revenus cash */
+  /** épargne / revenus */
   savingsRate: number | null;
 }
 
 export function monthTotals(items: MonthItem[]): MonthTotals {
-  let revenusCash = 0;
-  let revenusInKind = 0;
-  let depensesFixes = 0;
-  let depensesVariables = 0;
-  let epargne = 0;
-  for (const it of items) {
-    const a = Number.isFinite(it.amount) ? it.amount : 0;
-    switch (it.category) {
-      case 'revenu':
-        if (it.inKind) revenusInKind += a;
-        else revenusCash += a;
-        break;
-      case 'depense_fixe':
-        depensesFixes += a;
-        break;
-      case 'depense_variable':
-        depensesVariables += a;
-        break;
-      case 'epargne':
-        epargne += a;
-        break;
-    }
-  }
+  const sum = (cat: MonthItem['category']) => items.filter((it) => it.category === cat).reduce((s, it) => s + finite(it.amount), 0);
+  const revenus = sum('revenu');
+  const depensesFixes = sum('depense_fixe');
+  const depensesVariables = sum('depense_variable');
+  const epargne = sum('epargne');
   return {
-    revenusCash,
-    revenusInKind,
+    revenus,
     depensesFixes,
     depensesVariables,
     epargne,
-    cashflow: revenusCash - depensesFixes - depensesVariables - epargne,
-    savingsRate: revenusCash > 0 ? epargne / revenusCash : null,
+    cashflow: revenus - depensesFixes - depensesVariables - epargne,
+    savingsRate: revenus > 0 ? epargne / revenus : null,
   };
 }
 
@@ -55,7 +39,12 @@ export function sortedMonthKeys(file: MonthsFile): string[] {
 export function monthlyContributionFor(goalId: string, items: MonthItem[]): number {
   return items
     .filter((it) => it.category === 'epargne' && it.goalId === goalId)
-    .reduce((sum, it) => sum + (Number.isFinite(it.amount) ? it.amount : 0), 0);
+    .reduce((sum, it) => sum + finite(it.amount), 0);
+}
+
+/** First month still open for contributions: once the current month is closed, its savings are already counted. */
+export function contributionStart(file: MonthsFile, nowKey: string): string {
+  return file.months[nowKey]?.closure ? addMonths(nowKey, 1) : nowKey;
 }
 
 export type GoalStatus = 'good' | 'warning' | 'critical' | 'reached' | 'nodate' | 'noamount' | 'abandoned' | 'income';
@@ -64,15 +53,16 @@ export interface GoalProgress {
   status: GoalStatus;
   progress: number | null;
   remaining: number | null;
+  /** Months left to contribute, from `fromKey` up to (excluding) the target month. */
   monthsLeft: number | null;
   requiredMonthly: number | null;
   currentMonthly: number;
   overdue: boolean;
 }
 
-export function goalProgress(goal: Goal, nowKey: string, currentItems: MonthItem[]): GoalProgress {
+export function goalProgress(goal: Goal, fromKey: string, currentItems: MonthItem[]): GoalProgress {
   const currentMonthly = monthlyContributionFor(goal.id, currentItems);
-  const monthsLeft = goal.targetDate ? diffMonths(nowKey, goal.targetDate) : null;
+  const monthsLeft = goal.targetDate ? diffMonths(fromKey, goal.targetDate) : null;
   const base: GoalProgress = {
     status: 'nodate',
     progress: null,
@@ -110,12 +100,40 @@ export function monthsToReach(remaining: number, monthly: number): number | null
   return Math.ceil(remaining / monthly);
 }
 
+/** Savings of a month that go to purchase goals, summed per goal. */
+export function monthContributions(items: MonthItem[], goals: Goal[]): GoalContribution[] {
+  const purchaseIds = new Set(goals.filter((g) => g.kind === 'achat').map((g) => g.id));
+  const byGoal = new Map<string, number>();
+  for (const it of items) {
+    if (it.category !== 'epargne' || !it.goalId || !purchaseIds.has(it.goalId) || !(it.amount > 0)) continue;
+    byGoal.set(it.goalId, (byGoal.get(it.goalId) ?? 0) + it.amount);
+  }
+  return Array.from(byGoal, ([goalId, amount]) => ({ goalId, amount: round2(amount) }));
+}
+
+export function applyContributions(goals: Goal[], contributions: GoalContribution[], sign: 1 | -1): Goal[] {
+  return goals.map((g) => {
+    const c = contributions.find((x) => x.goalId === g.id);
+    return c ? { ...g, savedAmount: Math.max(0, round2(g.savedAmount + sign * c.amount)) } : g;
+  });
+}
+
 export function sumLines(lines: AssetLine[]): number {
-  return lines.reduce((s, l) => s + (Number.isFinite(l.amount) ? l.amount : 0), 0);
+  return lines.reduce((s, l) => s + finite(l.amount), 0);
 }
 
 export function availableWealth(p: PatrimoineFile): number {
   return sumLines(p.financier);
+}
+
+export function withHistoryPoint(p: PatrimoineFile, month: string, total: number): PatrimoineFile {
+  return { ...p, history: [...p.history.filter((h) => h.month !== month), { month, total: round2(total) }] };
+}
+
+/** In 'quantite' mode the amount follows quantity × price; until both are known the previous amount is kept. */
+export function valued(line: AssetLine): AssetLine {
+  if (line.valuation !== 'quantite' || line.quantity == null || line.unitPrice == null) return line;
+  return { ...line, amount: round2(line.quantity * line.unitPrice) };
 }
 
 export interface CompoundRow {
@@ -149,4 +167,64 @@ export function simulateCompound(
     if (m % 12 === 0 || m === months) rows.push(row(m / 12));
   }
   return rows;
+}
+
+export interface ProjectionEvent {
+  /** "YYYY-MM" */
+  month: string;
+  /** Positive for an inflow, negative for a purchase. */
+  amount: number;
+  label: string;
+}
+
+export interface ProjectionInput {
+  /** Month of today's balances (point 0). */
+  fromKey: string;
+  months: number;
+  liquide: number;
+  investi: number;
+  /** Kept at its current value: no return is assumed for crypto. */
+  crypto: number;
+  toLiquid: number;
+  toInvested: number;
+  /** Monthly cash-flow net, only added in the second scenario. */
+  leftover: number;
+  liquidRate: number;
+  investedRate: number;
+  /** Events dated this month or earlier are applied at the first projected month. Inflows and purchases hit liquid savings. */
+  events: ProjectionEvent[];
+}
+
+export interface ProjectionPoint {
+  month: string;
+  savingsOnly: number;
+  withLeftover: number;
+}
+
+export function projectWealth(input: ProjectionInput): ProjectionPoint[] {
+  const monthly = (annual: number) => Math.pow(1 + annual, 1 / 12) - 1;
+  const rl = monthly(input.liquidRate);
+  const ri = monthly(input.investedRate);
+  const firstStep = addMonths(input.fromKey, 1);
+  const eventsAt = (key: string) =>
+    input.events.reduce((s, e) => s + ((e.month < firstStep ? firstStep : e.month) === key ? e.amount : 0), 0);
+
+  let liquidA = input.liquide;
+  let liquidB = input.liquide;
+  let invested = input.investi;
+  const start = input.liquide + input.investi + input.crypto;
+  const points: ProjectionPoint[] = [{ month: input.fromKey, savingsOnly: start, withLeftover: start }];
+  for (let m = 1; m <= input.months; m++) {
+    const key = addMonths(input.fromKey, m);
+    const events = eventsAt(key);
+    liquidA = liquidA * (1 + rl) + input.toLiquid + events;
+    liquidB = liquidB * (1 + rl) + input.toLiquid + input.leftover + events;
+    invested = invested * (1 + ri) + input.toInvested;
+    points.push({
+      month: key,
+      savingsOnly: liquidA + invested + input.crypto,
+      withLeftover: liquidB + invested + input.crypto,
+    });
+  }
+  return points;
 }

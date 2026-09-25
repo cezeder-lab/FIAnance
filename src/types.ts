@@ -6,13 +6,24 @@ export interface MonthItem {
   amount: number;
   category: ItemCategory;
   recurring: boolean;
-  /** Revenue that never hits the bank account (e.g. company-car benefit): shown but kept out of the cash-flow. */
-  inKind?: boolean;
   goalId?: string | null;
+}
+
+export interface GoalContribution {
+  goalId: string;
+  amount: number;
+}
+
+export interface MonthClosure {
+  /** ISO date */
+  closedAt: string;
+  /** Added to the goals' saved amounts when closing, subtracted again when reopening. */
+  contributions: GoalContribution[];
 }
 
 export interface MonthData {
   items: MonthItem[];
+  closure?: MonthClosure;
 }
 
 export interface MonthsFile {
@@ -50,10 +61,18 @@ export type AssetKind = 'liquide' | 'investi' | 'crypto';
 export interface AssetLine {
   id: string;
   label: string;
+  /** In 'quantite' mode, kept equal to quantity × unitPrice once both are known. */
   amount: number;
   kind?: AssetKind;
   /** ISO date of the last amount change. */
   updatedAt: string | null;
+  valuation?: 'montant' | 'quantite';
+  quantity?: number | null;
+  unitPrice?: number | null;
+  /** Yahoo Finance symbol quoted in euros, e.g. "VUAA.DE". */
+  quoteSymbol?: string;
+  /** ISO market time of the last online quote; cleared when the price is typed by hand. */
+  quoteAt?: string | null;
 }
 
 export interface HistoryPoint {
@@ -87,12 +106,25 @@ export interface BackupResult {
   files?: string[];
 }
 
+export interface Quote {
+  symbol: string;
+  price: number;
+  currency: string | null;
+  /** ISO market time */
+  time: string | null;
+  exchange: string | null;
+  name: string | null;
+}
+
+export type QuoteResult = { ok: true; quote: Quote } | { ok: false; error: string };
+
 export interface FiananceBridge {
   load(): Promise<LoadResult>;
   save(name: DataName, data: unknown): Promise<void>;
   saveSync(name: DataName, data: unknown): boolean;
   backup(): Promise<BackupResult>;
   openDataFolder(): Promise<string>;
+  fetchQuote(symbol: string): Promise<QuoteResult>;
 }
 
 declare global {
