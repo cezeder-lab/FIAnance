@@ -85,12 +85,10 @@
     "financier": [
       { "label": "Livret A", "amount": 0, "kind": "liquide" },
       { "label": "LDDS (épargne Cartier)", "amount": 1500, "kind": "liquide" },
-      { "label": "Compte-titres ETF S&P 500 (VUAA)", "amount": 0, "kind": "investi", "valuation": "quantite", "quoteSymbol": "VUAA.DE" },
+      { "label": "Compte-titres ETF S&P 500 (VUAA)", "amount": 0, "kind": "investi", "valuation": "quantite" },
       { "label": "Bitcoin (BTC)", "amount": 0, "kind": "crypto", "valuation": "quantite" },
       { "label": "Ethereum (ETH)", "amount": 0, "kind": "crypto", "valuation": "quantite" },
       { "label": "Solana (SOL)", "amount": 0, "kind": "crypto", "valuation": "quantite" }
-    ],
-    "immobilier": [],
-    "heritage": []
+    ]
   }
 }

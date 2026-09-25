@@ -29,28 +29,20 @@ interface SeedLine {
   amount: number;
   kind?: string;
   valuation?: string;
-  quoteSymbol?: string;
 }
 
 export function seedPatrimoine(): PatrimoineFile {
-  const lines = (arr: SeedLine[]): AssetLine[] =>
-    arr.map((l) => ({
+  const financier = seed.patrimoine.financier.map(
+    (l: SeedLine): AssetLine => ({
       id: uid(),
       label: l.label,
       amount: l.amount,
       kind: l.kind as AssetLine['kind'],
       updatedAt: null,
-      ...(l.valuation === 'quantite'
-        ? { valuation: 'quantite' as const, quantity: null, unitPrice: null, quoteSymbol: l.quoteSymbol ?? '', quoteAt: null }
-        : {}),
-    }));
-  return {
-    version: 1,
-    financier: lines(seed.patrimoine.financier),
-    immobilier: lines(seed.patrimoine.immobilier),
-    heritage: lines(seed.patrimoine.heritage),
-    history: [],
-  };
+      ...(l.valuation === 'quantite' ? { valuation: 'quantite' as const, quantity: null, unitPrice: null } : {}),
+    }),
+  );
+  return { version: 1, financier, history: [] };
 }
 
 /** Copies the recurring items of `items`, with fresh ids, for a new month. */

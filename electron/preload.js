@@ -6,5 +6,4 @@ contextBridge.exposeInMainWorld('fianance', {
   saveSync: (name, data) => ipcRenderer.sendSync('data:save-sync', name, data),
   backup: () => ipcRenderer.invoke('data:backup'),
   openDataFolder: () => ipcRenderer.invoke('data:open-folder'),
-  fetchQuote: (symbol) => ipcRenderer.invoke('quote:fetch', symbol),
 });

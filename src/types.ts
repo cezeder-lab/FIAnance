@@ -69,10 +69,6 @@ export interface AssetLine {
   valuation?: 'montant' | 'quantite';
   quantity?: number | null;
   unitPrice?: number | null;
-  /** Yahoo Finance symbol quoted in euros, e.g. "VUAA.DE". */
-  quoteSymbol?: string;
-  /** ISO market time of the last online quote; cleared when the price is typed by hand. */
-  quoteAt?: string | null;
 }
 
 export interface HistoryPoint {
@@ -84,8 +80,6 @@ export interface HistoryPoint {
 export interface PatrimoineFile {
   version: 1;
   financier: AssetLine[];
-  immobilier: AssetLine[];
-  heritage: AssetLine[];
   history: HistoryPoint[];
 }
 
@@ -106,25 +100,12 @@ export interface BackupResult {
   files?: string[];
 }
 
-export interface Quote {
-  symbol: string;
-  price: number;
-  currency: string | null;
-  /** ISO market time */
-  time: string | null;
-  exchange: string | null;
-  name: string | null;
-}
-
-export type QuoteResult = { ok: true; quote: Quote } | { ok: false; error: string };
-
 export interface FiananceBridge {
   load(): Promise<LoadResult>;
   save(name: DataName, data: unknown): Promise<void>;
   saveSync(name: DataName, data: unknown): boolean;
   backup(): Promise<BackupResult>;
   openDataFolder(): Promise<string>;
-  fetchQuote(symbol: string): Promise<QuoteResult>;
 }
 
 declare global {

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ArrowRight, CalendarCheck } from 'lucide-react';
 import type { Nav } from '../App';
 import { useData } from '../state/DataContext';
-import { availableWealth, contributionStart, goalProgress, monthTotals, sumLines } from '../lib/calc';
+import { availableWealth, contributionStart, goalProgress, monthTotals } from '../lib/calc';
 import { formatEURRounded, formatPercent, formatSignedEUR } from '../lib/format';
 import { addMonths, formatMonthLong, formatMonthShort, monthsLeftLabel } from '../lib/months';
 import { Card, PageHeader, StatTile } from '../components/Layout';
@@ -40,8 +40,6 @@ export function Dashboard({ nav }: { nav: Nav }) {
         rank[a.goal.priority] - rank[b.goal.priority] || (a.goal.targetDate ?? '9999').localeCompare(b.goal.targetDate ?? '9999'),
     );
   const incomes = goals.goals.filter((g) => g.kind === 'entree' && g.priority !== 'abandonne');
-  const immobilier = sumLines(patrimoine.immobilier);
-  const heritage = sumLines(patrimoine.heritage);
 
   return (
     <div>
@@ -85,7 +83,7 @@ export function Dashboard({ nav }: { nav: Nav }) {
                 depuis {formatMonthLong(previous.month).toLowerCase()}
               </>
             ) : (
-              'Liquide + investi, hors immobilier et héritage'
+              'Livrets, placements et crypto'
             )}
           </div>
           <div className="mt-2">
@@ -139,44 +137,29 @@ export function Dashboard({ nav }: { nav: Nav }) {
           )}
         </Card>
 
-        <div className="flex flex-col gap-6">
-          <Card title="Entrées d’argent prévues">
-            {incomes.length === 0 ? (
-              <p className="text-sm text-muted">Aucune.</p>
-            ) : (
-              <ul className="space-y-3">
-                {incomes.map((g) => (
-                  <li key={g.id}>
-                    <div className="font-medium text-ink">{g.name}</div>
-                    <div className="tabular text-sm text-ink-2">
-                      {g.amountMin !== null && g.amountMax !== null && g.amountMin !== g.amountMax
-                        ? `${formatEURRounded(g.amountMin)} – ${formatEURRounded(g.amountMax)}`
-                        : formatEURRounded(g.amountMin ?? g.amountMax ?? 0)}
+        <Card title="Entrées d’argent prévues" className="self-start">
+          {incomes.length === 0 ? (
+            <p className="text-sm text-muted">Aucune.</p>
+          ) : (
+            <ul className="space-y-3">
+              {incomes.map((g) => (
+                <li key={g.id}>
+                  <div className="font-medium text-ink">{g.name}</div>
+                  <div className="tabular text-sm text-ink-2">
+                    {g.amountMin !== null && g.amountMax !== null && g.amountMin !== g.amountMax
+                      ? `${formatEURRounded(g.amountMin)} – ${formatEURRounded(g.amountMax)}`
+                      : formatEURRounded(g.amountMin ?? g.amountMax ?? 0)}
+                  </div>
+                  {g.targetDate && (
+                    <div className="text-xs text-muted">
+                      {formatMonthLong(g.targetDate)} · {monthsLeftLabel(nowKey, g.targetDate)}
                     </div>
-                    {g.targetDate && (
-                      <div className="text-xs text-muted">
-                        {formatMonthLong(g.targetDate)} · {monthsLeftLabel(nowKey, g.targetDate)}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-
-          <Card title="Hors patrimoine disponible" subtitle="Affiché pour mémoire, jamais additionné.">
-            <dl className="tabular space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-ink-2">Immobilier & familial</dt>
-                <dd className="font-medium text-ink">{immobilier > 0 ? formatEURRounded(immobilier) : '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-ink-2">Héritage potentiel (non reçu)</dt>
-                <dd className="font-medium text-ink-2">{heritage > 0 ? formatEURRounded(heritage) : '—'}</dd>
-              </div>
-            </dl>
-          </Card>
-        </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
 
       <Card className="mt-6" title="Évolution du patrimoine financier disponible">
