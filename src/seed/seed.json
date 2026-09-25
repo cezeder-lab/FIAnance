@@ -1,0 +1,97 @@
+{
+  "monthItems": [
+    { "label": "Salaire net", "amount": 4150, "category": "revenu", "recurring": true },
+    { "label": "Avantage véhicule (valeur estimée)", "amount": 725, "category": "revenu", "recurring": true, "inKind": true },
+    { "label": "Loyer", "amount": 922, "category": "depense_fixe", "recurring": true },
+    { "label": "Énergie", "amount": 110, "category": "depense_fixe", "recurring": true },
+    { "label": "Assurance", "amount": 12, "category": "depense_fixe", "recurring": true },
+    { "label": "Mutuelle", "amount": 14, "category": "depense_fixe", "recurring": true },
+    { "label": "Basic-Fit", "amount": 21, "category": "depense_fixe", "recurring": true },
+    { "label": "Spotify", "amount": 12, "category": "depense_fixe", "recurring": true },
+    { "label": "Barbier", "amount": 50, "category": "depense_fixe", "recurring": true },
+    { "label": "Frais bancaires", "amount": 22, "category": "depense_fixe", "recurring": true },
+    { "label": "Internet", "amount": 40, "category": "depense_fixe", "recurring": true },
+    { "label": "Alimentation", "amount": 450, "category": "depense_fixe", "recurring": true },
+    { "label": "Épargne Cartier Santos (LDDS)", "amount": 1000, "category": "epargne", "recurring": true, "goalId": "goal-cartier-santos" },
+    { "label": "ETF S&P 500 (jusqu'à vente Fabia)", "amount": 500, "category": "epargne", "recurring": true }
+  ],
+  "goals": [
+    {
+      "id": "goal-cartier-santos",
+      "kind": "achat",
+      "name": "Cartier Santos occasion, cadran bleu",
+      "priority": "haute",
+      "targetDate": "2027-03",
+      "targetAmount": 7250,
+      "savedAmount": 1500,
+      "linkedAccount": "LDDS",
+      "amountMin": null,
+      "amountMax": null,
+      "notes": ""
+    },
+    {
+      "id": "goal-vente-fabia",
+      "kind": "entree",
+      "name": "Vente Fabia",
+      "priority": "haute",
+      "targetDate": "2026-12",
+      "targetAmount": null,
+      "savedAmount": 0,
+      "linkedAccount": "",
+      "amountMin": 15000,
+      "amountMax": 19500,
+      "notes": "Estimation selon l'état du marché."
+    },
+    {
+      "id": "goal-vetements-ah",
+      "kind": "achat",
+      "name": "Vêtements automne-hiver",
+      "priority": "haute",
+      "targetDate": "2026-10",
+      "targetAmount": 150,
+      "savedAmount": 0,
+      "linkedAccount": "",
+      "amountMin": null,
+      "amountMax": null,
+      "notes": ""
+    },
+    {
+      "id": "goal-velo-electrique",
+      "kind": "achat",
+      "name": "Vélo électrique",
+      "priority": "basse",
+      "targetDate": null,
+      "targetAmount": 1500,
+      "savedAmount": 0,
+      "linkedAccount": "",
+      "amountMin": null,
+      "amountMax": null,
+      "notes": "Budget max."
+    },
+    {
+      "id": "goal-danelectro-longhorn",
+      "kind": "achat",
+      "name": "Basse Danelectro Longhorn",
+      "priority": "basse",
+      "targetDate": null,
+      "targetAmount": null,
+      "savedAmount": 0,
+      "linkedAccount": "",
+      "amountMin": null,
+      "amountMax": null,
+      "notes": ""
+    }
+  ],
+  "patrimoine": {
+    "financier": [
+      { "label": "Livret A", "amount": 0, "kind": "liquide" },
+      { "label": "LDDS (épargne Cartier)", "amount": 1500, "kind": "liquide" },
+      { "label": "Compte-titres ETF S&P 500 (VUAA)", "amount": 0, "kind": "investi" },
+      { "label": "Bitcoin (BTC)", "amount": 0, "kind": "crypto" },
+      { "label": "Ethereum (ETH)", "amount": 0, "kind": "crypto" },
+      { "label": "Solana (SOL)", "amount": 0, "kind": "crypto" }
+    ],
+    "immobilier": [],
+    "heritage": []
+  }
+}

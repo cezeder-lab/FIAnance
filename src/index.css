@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --page: #f4f4f1;
+  --surface: #fcfcfb;
+  --sunken: #f0efec;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #7a7873;
+  --line: rgba(11, 11, 11, 0.1);
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --accent: #2a78d6;
+  --accent-hover: #256abf;
+  --accent-soft: #e6effb;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --positive: #006300;
+  --negative: #c53030;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
+  --good-soft: #e4f3e4;
+  --warning-soft: #fdf2d8;
+  --critical-soft: #f9e3e3;
+  /* Darker steps of the status hues for icons sitting on the soft tints. */
+  --good-ink: #0a7d0a;
+  --warning-ink: #9a6400;
+  --critical-ink: #c53030;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --sunken: #242423;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #8f8d87;
+    --line: rgba(255, 255, 255, 0.1);
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --accent: #3987e5;
+    --accent-hover: #5598e7;
+    --accent-soft: #1a2940;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --positive: #0ca30c;
+    --negative: #e66767;
+    --good-soft: #16291a;
+    --warning-soft: #33290f;
+    --critical-soft: #3a1b1b;
+    --good-ink: #0ca30c;
+    --warning-ink: #fab219;
+    --critical-ink: #e66767;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-page text-ink antialiased;
+  font-size: 14px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors
+      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-white hover:bg-[var(--accent-hover)];
+  }
+  .btn-secondary {
+    @apply btn border border-line bg-surface text-ink hover:bg-sunken;
+  }
+  .btn-ghost {
+    @apply btn text-ink-2 hover:bg-sunken hover:text-ink;
+  }
+
+  .icon-btn {
+    @apply inline-flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors
+      hover:bg-sunken hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent;
+  }
+
+  /* Inputs that read as plain text until hovered/focused, for fast in-place edits. */
+  .inline-input {
+    @apply w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-ink outline-none transition-colors
+      placeholder:text-muted hover:border-line focus:border-accent focus:bg-surface;
+  }
+
+  .field {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink outline-none transition-colors
+      placeholder:text-muted focus:border-accent;
+  }
+
+  .label {
+    @apply mb-1 block text-xs font-medium text-ink-2;
+  }
+
+  .section-title {
+    @apply text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+}

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+release/
+*.log
+.DS_Store
+Thumbs.db
+
+# Personal financial data must never be committed.
+# The app writes it to the OS user-data folder (outside this repo); these patterns
+# guard against copies or backups landing in the working tree by mistake.
+mois.json
+objectifs.json
+patrimoine.json
+fianance_*.json
+*.illisible_*.json
+/data/
+/backups/
